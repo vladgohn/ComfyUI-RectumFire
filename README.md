@@ -1,2 +1,1 @@
-# ComfyUI-RectumFire
-ComfyUI-RectumFire
+# ComfyUI-RectumFire🔥
