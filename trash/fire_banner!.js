@@ -1,34 +1,46 @@
-// fire_toster.js
-// RectumFire DOM tosters (glass) — reusable module.
-// UI only — no engine logic changed.
+// fire_banner.js
+// RectumFire DOM banners (glass) — reusable module.
+// IMPORTANT:
+// - never blocks UI clicks (root/card pointer-events none; only close clickable)
+// - no leftovers (removes root + style when empty)
+// - stacks vertically
 
 const TOKENS = Object.freeze({
   pos: { top: 14, right: 18 },
 
   card: {
-    width: 280,
-    radius: 14,
+    width: 300,
+    height: 90,
+    radius: 10,
+    padX: 12,
+    padY: 8,
+    gap: 8,
   },
 
   close: {
     box: 24,
-    fontSize: 20,
+    fontSize: 22,
   },
 
   type: {
     family: "Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial",
+    titleSize: 18,
+    titleWeight: 600,
+    subSize: 12,
+    subWeight: 500,
   },
 
+  // bg uses rgba alpha + blur (your version)
   themes: {
-    green:   { bg: "rgba(10,38,22,0.85)", stroke: "#114A29", fg: "#22C55E" },
-    violet:  { bg: "rgba(23,21,36,0.85)", stroke: "#624B89", fg: "#8F60F4" },
-    magenta: { bg: "rgba(45,12,32,0.85)", stroke: "#901F4A", fg: "#DC6C98" },
+    green:   { bg: "rgba(10,38,22,0.5)", stroke: "#114A29", fg: "#22C55E" },
+    violet:  { bg: "rgba(23,21,36,0.5)", stroke: "#624B89", fg: "#8F60F4" },
+    magenta: { bg: "rgba(45,12,32,0.5)", stroke: "#901F4A", fg: "#DC6C98" },
   },
 });
 
-const FireDomtoster = (() => {
-  const ROOT_ID = "rf-fire-toster-root";
-  const STYLE_ID = "rf-fire-toster-style";
+const FireDomBanner = (() => {
+  const ROOT_ID = "rf-fire-banner-root";
+  const STYLE_ID = "rf-fire-banner-style";
 
   const CLS = Object.freeze({
     card: "rfFire__card",
@@ -36,7 +48,6 @@ const FireDomtoster = (() => {
     hide: "rfFire__hide",
     titleRow: "rfFire__titleRow",
     title: "rfFire__title",
-    head: "rfFire__head",
     sub: "rfFire__sub",
     close: "rfFire__close",
   });
@@ -55,20 +66,19 @@ const FireDomtoster = (() => {
 
   display: flex !important;
   flex-direction: column !important;
-  gap: 12px !important;
+  gap: 10px !important;
 
   pointer-events: none !important;
 }
 
 .${CLS.card}{
   width: ${TOKENS.card.width}px;
-  min-height: 64px;
-  height: auto;
-
+  height: ${TOKENS.card.height}px;
   border-radius: ${TOKENS.card.radius}px;
   box-sizing: border-box;
 
-  padding: 14px 16px;
+  padding: ${TOKENS.card.padY}px ${TOKENS.card.padX}px;
+  overflow: hidden;
 
   transform: translateY(10px);
   opacity: 0;
@@ -81,9 +91,6 @@ const FireDomtoster = (() => {
 
   pointer-events: none !important;
   position: relative;
-
-  overflow-wrap: anywhere;
-  word-break: break-word;
 }
 
 .${CLS.card}.${CLS.show}{
@@ -99,33 +106,30 @@ const FireDomtoster = (() => {
 .${CLS.titleRow}{
   position: relative;
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: ${TOKENS.card.gap}px;
 }
 
 .${CLS.title}{
-  font-size: 15px;
-  font-weight: 500;
-  line-height: 1.2;
-}
-
-.${CLS.head}{
-  font-size: 12px;
-  font-weight: 400;
-  color: #ffffff;
-  line-height: 1.2;
-  margin-bottom: 4px;
+  font-size: ${TOKENS.type.titleSize}px;
+  font-weight: ${TOKENS.type.titleWeight};
+  line-height: 1.1;
 }
 
 .${CLS.sub}{
-  font-size: 11px;
-  font-weight: 400;
-  color: #ffffff;
-  line-height: 1.2;
+  font-size: ${TOKENS.type.subSize}px;
+  font-weight: ${TOKENS.type.subWeight};
+  line-height: 1.15;
+  color: #fff;
+  opacity: .95;
 }
 
 .${CLS.close}{
+  position: absolute;
+  top: -2px;
+  right: -2px;
+
   width: ${TOKENS.close.box}px;
   height: ${TOKENS.close.box}px;
   display: grid;
@@ -184,22 +188,15 @@ const FireDomtoster = (() => {
     el.style.border = `1px solid ${pal.stroke}`;
     el.style.pointerEvents = "none";
 
+    // NOTE: preserve \n as line breaks in sub
     const safeSub = escapeHtml(sub).replaceAll("\n", "<br/>");
-    const parts = safeSub.split("<br/>");
-
-    const head = parts[0] || "";
-    const detail = parts[1] || "";
 
     el.innerHTML = `
       <div class="${CLS.titleRow}">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <div style="font-size:16px;">🔥</div>
-          <div class="${CLS.title}" style="color:${pal.fg}">Fire Resolve</div>
-        </div>
+        <div class="${CLS.title}" style="color:${pal.fg}">${escapeHtml(title)}</div>
         <div class="${CLS.close}" aria-label="close" style="color:${pal.fg}">×</div>
       </div>
-      <div class="${CLS.head}">${head}</div>
-      ${detail ? `<div class="${CLS.sub}">${detail}</div>` : ``}
+      <div class="${CLS.sub}">${safeSub}</div>
     `;
 
     root.appendChild(el);
@@ -234,6 +231,8 @@ const FireDomtoster = (() => {
       }
     } catch (_) {}
 
+    try { el.style.pointerEvents = "none"; } catch (_) {}
+
     el.classList.remove(CLS.show);
     el.classList.add(CLS.hide);
 
@@ -246,11 +245,16 @@ const FireDomtoster = (() => {
   return { show: makeCard };
 })();
 
-export function firetosterShow({ theme = "green", title = "Fire Resolve", sub = "", lifeMs } = {}) {
+/**
+ * Public API for other scripts.
+ * theme: "green" | "violet" | "magenta"
+ */
+export function fireBannerShow({ theme = "green", title = "Fire Resolve", sub = "", lifeMs } = {}) {
   try {
-    return FireDomtoster.show({ theme, title, sub, lifeMs });
+    return FireDomBanner.show({ theme, title, sub, lifeMs });
   } catch (e) {
-    console.log(`[Firetoster] failed:`, e);
+    // last resort: never break caller logic
+    console.log(`[FireBanner] failed:`, e);
     return null;
   }
 }

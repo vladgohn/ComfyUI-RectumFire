@@ -1,127 +1,98 @@
-import { app } from "/scripts/app.js";
+import { app } from "../../scripts/app.js";
 
-// Support both new and legacy internal node types
-const FIRE_NOTE_TYPES = ["RectumFireNote", "RectumFire Sticker Note"];
-
-// kawaii post-it palette
-const BG = "#ffe0ee";        // soft pink
-const BORDER = "#ff77b7";    // border pink
-const TITLE = "#ff2f8e";     // title color
-
-function isFireNote(node) {
-  if (!node) return false;
-
-  // Primary: by internal type
-  if (node?.type && FIRE_NOTE_TYPES.includes(node.type)) return true;
-
-  // Fallback: by title (if type changed in some builds)
-  const t = String(node?.title || "").toLowerCase();
-  if (t.includes("fire note")) return true;
-
-  return false;
-}
-
-function applyKawaiiStyle(node) {
-  if (!node) return;
-
-  node.bgcolor = BG;
-  node.color = BORDER;
-  node.title = "🔥Fire Note";
-
-  const minW = Math.max(node.size?.[0] || 0, 380);
-  const minH = Math.max(node.size?.[1] || 0, 260);
-  node.size = [minW, minH];
-
-  node.title_color = TITLE;
-  node.rounded = true;
-
-  try {
-    const widget =
-      (node.widgets || []).find(x => x?.name === "text") ||
-      (node.widgets || [])[0];
-
-    const el = widget?.inputEl || widget?.element || widget?.textarea || null;
-
-    if (el) {
-      // styles
-      if (el.style) {
-        el.style.background = "#ff9acb";
-        el.style.color = "#1b1b1b";
-        el.style.fontSize = "14px";
-        el.style.padding = "6px";
-        el.style.border = "1px solid #ff5aa8";
-      }
-
-      // Single-click selects the whole line
-      if (!el.__fireLineSelectInstalled) {
-        el.addEventListener("mousedown", (ev) => {
-          if (ev.button !== 0) return;
-          if (ev.shiftKey || ev.altKey || ev.ctrlKey || ev.metaKey) return;
-
-          const ta = ev.currentTarget;
-          const text = ta.value || "";
-          const pos = ta.selectionStart ?? 0;
-
-          setTimeout(() => {
-            const p = ta.selectionStart ?? pos;
-
-            let start = text.lastIndexOf("\n", p - 1);
-            start = (start === -1) ? 0 : start + 1;
-
-            let end = text.indexOf("\n", p);
-            end = (end === -1) ? text.length : end;
-
-            if (start === end) return;
-            ta.setSelectionRange(start, end);
-          }, 0);
-        });
-
-        el.__fireLineSelectInstalled = true;
-      }
-    }
-  } catch (e) {}
-}
-
-function styleAll() {
-  const g = app?.graph;
-  const nodes = g?._nodes || [];
-  for (const n of nodes) {
-    if (isFireNote(n)) applyKawaiiStyle(n);
+function overlay(text, ms = 1200) {
+  const id = "__rf_overlay__";
+  let el = document.getElementById(id);
+  if (!el) {
+    el = document.createElement("div");
+    el.id = id;
+    el.style.position = "fixed";
+    el.style.right = "14px";
+    el.style.top = "14px";
+    el.style.zIndex = "999999";
+    el.style.padding = "10px 12px";
+    el.style.borderRadius = "10px";
+    el.style.background = "rgba(0,0,0,.78)";
+    el.style.color = "#fff";
+    el.style.font = "12px/1.35 system-ui";
+    document.body.appendChild(el);
   }
-  app?.canvas?.setDirty(true, true);
+  el.textContent = text;
+  el.style.display = "block";
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.style.display = "none", ms);
 }
 
-/**
- * В новых сборках textarea у widget может создаваться не сразу.
- * Поэтому делаем короткую “догонялку” на несколько секунд после старта.
- * Это и вернёт line-select, и вернёт стили даже если DOM появился позже.
- */
-function startCatchUpStyler() {
-  const started = Date.now();
-  const id = setInterval(() => {
-    styleAll();
+function readClipboardSync() {
+  const ta = document.createElement("textarea");
+  ta.style.position = "fixed";
+  ta.style.left = "-9999px";
+  ta.style.top = "0";
+  document.body.appendChild(ta);
+  ta.focus();
+  document.execCommand("paste");
+  const text = ta.value;
+  document.body.removeChild(ta);
+  return text;
+}
 
-    // живём недолго, чтобы не жрать CPU
-    if (Date.now() - started > 12000) clearInterval(id);
-  }, 500);
+function createNoteAtMouse(text) {
+  const g = app?.graph;
+  const canvas = app?.canvas;
+  if (!g || !canvas) {
+    overlay("Graph not ready");
+    return;
+  }
+
+  const node = LiteGraph.createNode("RectumFireNote");
+  if (!node) {
+    overlay("FireNote type missing");
+    return;
+  }
+
+  const pos = canvas.convertCanvasToOffset(canvas.mouse || [100, 100]);
+  node.pos = pos;
+
+  g.add(node);
+
+  if (node.widgets && node.widgets.length > 0) {
+    node.widgets[0].value = text;
+  }
+
+  app.canvas.setDirty(true, true);
+}
+
+function pasteNow() {
+  const text = readClipboardSync();
+
+  if (!text) {
+    overlay("Clipboard empty");
+    return;
+  }
+
+  createNoteAtMouse(text);
+  overlay("Pasted");
+}
+
+function install() {
+  if (window.__rf_note_installed__) return;
+  window.__rf_note_installed__ = true;
+
+  window.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.altKey && e.shiftKey && e.key.toLowerCase() === "v") {
+        e.preventDefault();
+        pasteNow();
+      }
+    },
+    true
+  );
 }
 
 app.registerExtension({
-  name: "comfyui.rectumfire.firenote_kawaii",
+  name: "rectumfire.note",
   setup() {
-    console.log("[Fire Note] kawaii style loaded");
-
-    styleAll();
-    setTimeout(styleAll, 250);
-    setTimeout(styleAll, 1000);
-
-    startCatchUpStyler();
+    install();
   },
-
-  nodeCreated(node) {
-    if (isFireNote(node)) {
-      applyKawaiiStyle(node);
-      app?.canvas?.setDirty(true, true);
-    }
-  }
 });

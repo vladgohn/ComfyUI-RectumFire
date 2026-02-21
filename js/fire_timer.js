@@ -12,7 +12,106 @@ import { api } from "/scripts/api.js";
  * - It freezes on final elapsed time and holds it.
  * - Reset happens only on the next execution_start (new run).
  */
+// ---------------- eyes (png overlay drawn on node canvas) ----------------
+const EYES_ASSET = {
+  srcW: 86,
+  srcH: 67,
 
+  // FIXED draw size in canvas pixels (no scaling with node size)
+  drawW: 86/1.5,      // 86/2
+  drawH: 67/1.5,      // 67/2
+
+  // pupil dx in SOURCE pixels, converted to draw pixels by (drawW/srcW)
+  dxSrcMax: 13,
+
+  halfCycleMs: 500,
+  pow: 6,
+
+  // Anchor constants (canvas px)
+  padRight: 10,
+  popOutPx: 50,   // tune this only
+
+  baseImg: null,
+  pupilImg: null,
+  loaded: false,
+
+  lastDx: 0,
+};
+
+function easeInOutPow(t, p = 6) {
+  t = Math.max(0, Math.min(1, t));
+  if (t < 0.5) return 0.5 * Math.pow(2 * t, p);
+  return 1 - 0.5 * Math.pow(2 * (1 - t), p);
+}
+
+function loadEyesAssetsOnce() {
+  if (EYES_ASSET._loading) return EYES_ASSET._loading;
+
+  EYES_ASSET._loading = (async () => {
+    // IMPORTANT: works regardless of where extension is mounted
+    const baseUrl = new URL("./assets/Eyes.png", import.meta.url).toString();
+    const pupilUrl = new URL("./assets/Pupil.png", import.meta.url).toString();
+
+    const load = (url) =>
+      new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = url;
+      });
+
+    try {
+      EYES_ASSET.baseImg = await load(baseUrl);
+      EYES_ASSET.pupilImg = await load(pupilUrl);
+      EYES_ASSET.loaded = true;
+    } catch (_) {
+      EYES_ASSET.loaded = false;
+    }
+  })();
+
+  return EYES_ASSET._loading;
+}
+
+function getEyesDx(nowMs, running) {
+  if (!running) return EYES_ASSET.lastDx;
+
+  const phase = nowMs % (EYES_ASSET.halfCycleMs * 2);
+  let t = (phase % EYES_ASSET.halfCycleMs) / EYES_ASSET.halfCycleMs;
+  t = easeInOutPow(t, EYES_ASSET.pow);
+
+  const goingRight = phase < EYES_ASSET.halfCycleMs;
+  const dx = goingRight
+    ? (EYES_ASSET.dxSrcMax * t)
+    : (EYES_ASSET.dxSrcMax * (1 - t));
+
+  EYES_ASSET.lastDx = dx;
+  return dx;
+}
+
+function drawEyes(ctx, node, w, h, nowMs) {
+  if (!EYES_ASSET.loaded || !EYES_ASSET.baseImg || !EYES_ASSET.pupilImg) return;
+
+  // Prefer real node size (stable)
+  const nw = (node && node.size && node.size[0]) ? node.size[0] : w;
+
+  const dw = EYES_ASSET.drawW;
+  const dh = EYES_ASSET.drawH;
+
+  // Right-top anchor (fixed)
+  const x = nw - EYES_ASSET.padRight - dw;
+  const y = -EYES_ASSET.popOutPx;
+
+  const running = !!node._rf_running;
+  const dxSrc = getEyesDx(nowMs, running);
+
+  // Convert dx from source px -> draw px
+  const dx = dxSrc * (dw / EYES_ASSET.srcW);
+
+  ctx.drawImage(EYES_ASSET.baseImg, x, y, dw, dh);
+  ctx.drawImage(EYES_ASSET.pupilImg, x + dx, y, dw, dh);
+};
+
+// ---------------- fire note utils (also used by fire copy/paste) ----------------
 const STYLE = {
   running: { bg: "#EDEDED", text: "#1E1E20" },
   stopped: { bg: "#282829", text: "#EDEDED" },
@@ -52,7 +151,7 @@ const STYLE = {
 
   try {
     document.fonts?.load?.(`${STYLE.fontWeight} 24px ${STYLE.fontFamily}`);
-  } catch (_) {}
+  } catch (_) { }
 })();
 
 // ---------------- utils ----------------
@@ -165,12 +264,17 @@ const Timer = {
   running: false,
   nodes: new Set(),
 
+  // MM:SS:CC (centiseconds, 00..99)
   format(ms) {
     if (ms < 0) ms = 0;
+
     const m = String(Math.floor(ms / 60000)).padStart(2, "0");
     const s = String(Math.floor((ms % 60000) / 1000)).padStart(2, "0");
-    const x = String(Math.floor(ms % 1000)).padStart(3, "0");
-    return `${m}:${s}:${x}`;
+
+    // 0..99 (ms / 10)
+    const cs = String(Math.floor((ms % 1000) / 10)).padStart(2, "0");
+
+    return `${m}:${s}:${cs}`;
   },
 
   tick() {
@@ -185,44 +289,31 @@ const Timer = {
 
     try {
       app.graph?.setDirtyCanvas(true, true);
-    } catch (_) {}
+    } catch (_) { }
   },
 
   start() {
     if (this.running) return;
-
-    // Reset ONLY here (new run)
     this.running = true;
-    this.elapsedMs = 0;
-    this.startTime = Date.now();
 
-    // Immediately show 00:00:000 at start
-    for (const n of this.nodes) {
-      n._rf_timerStr = "00:00:000";
-      setNodeRunning(n, true);
-    }
+    this.startTime = Date.now() - (this.elapsedMs || 0);
 
-    this.intervalId = setInterval(() => this.tick(), STYLE.tickMs);
-
-    try {
-      app.graph?.setDirtyCanvas(true, true);
-    } catch (_) {}
+    // 200ms update rate feels right for CC display without flicker
+    this.intervalId = setInterval(() => this.tick(), 200);
+    this.tick();
   },
 
   stop() {
     if (!this.running) return;
-
     this.running = false;
 
-    try {
-      if (this.intervalId != null) clearInterval(this.intervalId);
-    } catch (_) {}
-    this.intervalId = null;
+    if (this.intervalId) {
+      clearInterval(this.intervalId);
+      this.intervalId = null;
+    }
 
-    // Freeze final elapsed time (do NOT reset here)
-    this.elapsedMs = Math.max(0, Date.now() - this.startTime);
+    // Freeze on last value, mark nodes stopped
     const str = this.format(this.elapsedMs);
-
     for (const n of this.nodes) {
       n._rf_timerStr = str;
       setNodeRunning(n, false);
@@ -230,21 +321,69 @@ const Timer = {
 
     try {
       app.graph?.setDirtyCanvas(true, true);
-    } catch (_) {}
-  },
-
-  register(n) {
-    this.nodes.add(n);
-
-    // Ensure node has something to show, but don't force reset
-    if (!n._rf_timerStr) n._rf_timerStr = this.format(this.elapsedMs || 0);
-    if (n._rf_running == null) n._rf_running = false;
-  },
-
-  unregister(n) {
-    this.nodes.delete(n);
+    } catch (_) { }
   },
 };
+
+// ---------------- timer manager (handles multiple nodes, theme, etc) ----------------
+// const TimerManager = {
+//   start() {
+//     if (this.running) return;
+
+//     // Reset ONLY here (new run)
+//     this.running = true;
+//     this.elapsedMs = 0;
+//     this.startTime = Date.now();
+
+//     // Immediately show 00:00:000 at start
+//     for (const n of this.nodes) {
+//       n._rf_timerStr = "00:00:000";
+//       setNodeRunning(n, true);
+//     }
+
+//     this.intervalId = setInterval(() => this.tick(), STYLE.tickMs);
+
+//     try {
+//       app.graph?.setDirtyCanvas(true, true);
+//     } catch (_) { }
+//   },
+
+//   stop() {
+//     if (!this.running) return;
+
+//     this.running = false;
+
+//     try {
+//       if (this.intervalId != null) clearInterval(this.intervalId);
+//     } catch (_) { }
+//     this.intervalId = null;
+
+//     // Freeze final elapsed time (do NOT reset here)
+//     this.elapsedMs = Math.max(0, Date.now() - this.startTime);
+//     const str = this.format(this.elapsedMs);
+
+//     for (const n of this.nodes) {
+//       n._rf_timerStr = str;
+//       setNodeRunning(n, false);
+//     }
+
+//     try {
+//       app.graph?.setDirtyCanvas(true, true);
+//     } catch (_) { }
+//   },
+
+//   register(n) {
+//     this.nodes.add(n);
+
+//     // Ensure node has something to show, but don't force reset
+//     if (!n._rf_timerStr) n._rf_timerStr = this.format(this.elapsedMs || 0);
+//     if (n._rf_running == null) n._rf_running = false;
+//   },
+
+//   unregister(n) {
+//     this.nodes.delete(n);
+//   },
+// };
 
 // ---------------- detection ----------------
 function isOurTimerNode(nodeOrType) {
@@ -270,10 +409,10 @@ function patchNodeType(nodeType) {
       this._rf_running = !!this._rf_running;
       this._rf_themeFade = null;
 
-      Timer.register(this);
+      Timer.nodes.add(this);
 
       try {
-        // this.title = "🔥Fire Timer";
+        this.title = "🔥Timer";
         if (typeof LiteGraph !== "undefined" && LiteGraph.NO_TITLE != null) {
           this.title_mode = LiteGraph.NO_TITLE;
         } else {
@@ -281,8 +420,8 @@ function patchNodeType(nodeType) {
         }
         this.title_color = "transparent";
         this.titleTextColor = "transparent";
-      } catch (_) {}
-    } catch (_) {}
+      } catch (_) { }
+    } catch (_) { }
 
     return origOnNodeCreated?.apply(this, arguments);
   };
@@ -291,7 +430,7 @@ function patchNodeType(nodeType) {
   nodeType.prototype.onRemoved = function () {
     try {
       Timer.unregister(this);
-    } catch (_) {}
+    } catch (_) { }
     return origOnRemoved?.apply(this, arguments);
   };
 
@@ -364,7 +503,8 @@ function patchNodeType(nodeType) {
       x += (ctx.measureText(b.text).width || 0) + (b.gapAfter || 0);
     }
     ctx.globalAlpha = 1;
-
+    // Eyes overlay (can draw outside node via negative Y)
+    drawEyes(ctx, this, w, h, performance.now());
     ctx.restore();
 
     return origOnDrawForeground?.apply(this, arguments);
@@ -379,11 +519,12 @@ app.registerExtension({
     try {
       const name = String(nodeData?.name || nodeType?.type || "").toLowerCase();
       if (name.includes("fire") && name.includes("timer")) patchNodeType(nodeType);
-    } catch (_) {}
+    } catch (_) { }
   },
 
   init() {
     try {
+      loadEyesAssetsOnce();
       const nodes = app.graph?._nodes || [];
       for (const n of nodes) {
         if (isOurTimerNode(n)) Timer.register(n);
@@ -395,7 +536,7 @@ app.registerExtension({
       }
 
       app.graph?.setDirtyCanvas(true, true);
-    } catch (_) {}
+    } catch (_) { }
   },
 });
 

@@ -1,22 +1,25 @@
 WEB_DIRECTORY = "js"
 
 from .fire_timer import RectumFireTimer
-from .fire_route import RectumFireRoute
-from .fire_done  import RectumFireDone
-from .fire_note  import RectumFireNote
+from .fire_done import RectumFireDone
+from .fire_note import RectumFireNote
+from .fire_switch import RectumFireSwitch
+from .fire_banner import RectumFireBanner
 
 NODE_CLASS_MAPPINGS = {
-    "RectumFireNote":  RectumFireNote,
     "RectumFireTimer": RectumFireTimer,
-    "RectumFireRoute": RectumFireRoute,
-    "RectumFireDone":  RectumFireDone,
+    "RectumFireDone": RectumFireDone,
+    "RectumFireNote": RectumFireNote,
+    "RectumFireSwitch": RectumFireSwitch,
+    "RectumFireBanner": RectumFireBanner,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "RectumFireNote":  "🔥Fire Note",
+    "RectumFireDone": "🔥Fire🔊",
+    "RectumFireNote": "🔥Fire Note",
     "RectumFireTimer": "🔥Fire Timer",
-    "RectumFireRoute": "🔥Fire Route",
-    "RectumFireDone":  "🔥Fire🔊",
+    "RectumFireSwitch": "🔥Fire Switch",
+    "RectumFireBanner": "🔥Fire Banner",
 }
 
 __all__ = [

@@ -3,17 +3,26 @@ import { app } from "../../scripts/app.js";
 const NODE_TYPE = "RectumFireDone";
 const NODE_WIDTH = 200; // width only
 
-const PALETTE = Object.freeze({
-  idle: { color: "#3A3A3A", bgcolor: "#1F1F1F" },
-  done: { color: "#ffaaee", bgcolor: "#40007c" },
-});
+const TITLE_DONE = "💯";
 
-function setNodeColors(node, which) {
-  const p = PALETTE[which];
-  if (!p) return;
-  node.color = p.color;
-  node.bgcolor = p.bgcolor;
+function rememberDefaultTitle(node) {
+  if (node.__rf_default_title__ != null) return;
+  node.__rf_default_title__ = typeof node.title === "string" ? node.title : "";
+}
+
+function setTitle(node, t) {
+  node.title = t;
   node.setDirtyCanvas?.(true, true);
+}
+
+function restoreTitle(node) {
+  rememberDefaultTitle(node);
+  setTitle(node, node.__rf_default_title__);
+}
+
+function setDoneTitle(node) {
+  rememberDefaultTitle(node);
+  setTitle(node, TITLE_DONE);
 }
 
 function setNodeWidthOnly(node, w) {
@@ -41,7 +50,7 @@ app.registerExtension({
   name: "RectumFire.Done",
 
   setup() {
-    // Reset colors when a new queue starts: remaining goes 0 -> >0
+    // Restore title when a new queue starts: remaining goes 0 -> >0
     app.api.addEventListener("status", (e) => {
       const remaining = e?.detail?.exec_info?.queue_remaining;
       if (typeof remaining !== "number") return;
@@ -52,7 +61,7 @@ app.registerExtension({
       }
 
       if (prevRemaining === 0 && remaining > 0) {
-        forEachDoneNode((n) => setNodeColors(n, "idle"));
+        forEachDoneNode((n) => restoreTitle(n));
       }
 
       prevRemaining = remaining;
@@ -66,10 +75,8 @@ app.registerExtension({
     nodeType.prototype.onNodeCreated = function () {
       prevCreated?.apply(this, arguments);
 
-      // Initial color
-      setNodeColors(this, "idle");
+      rememberDefaultTitle(this);
 
-      // Width only (after layout settles)
       setTimeout(() => {
         setNodeWidthOnly(this, NODE_WIDTH);
       }, 0);
@@ -82,8 +89,7 @@ app.registerExtension({
       const enabled = this.widgets?.find((w) => w?.name === "enable")?.value ?? true;
       if (!enabled) return;
 
-      // Mark as executed
-      setNodeColors(this, "done");
+      setDoneTitle(this);
 
       const url = new URL("./assets/done.mp3", import.meta.url).toString();
 

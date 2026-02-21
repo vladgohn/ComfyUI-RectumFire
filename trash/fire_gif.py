@@ -1,12 +1,13 @@
+# fire_gif.py
+
 class AnyType(str):
     def __ne__(self, __value: object) -> bool:
         return False
 
-
 ANY = AnyType("*")
 
 
-class RectumFireDone:
+class RectumFireGif:
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -18,11 +19,9 @@ class RectumFireDone:
 
     FUNCTION = "nop"
     INPUT_IS_LIST = True
-
-    # Output/bell node: it must be an execution root, but must have zero outputs.
+    OUTPUT_IS_LIST = (True,)
     OUTPUT_NODE = True
-    RETURN_TYPES = ()
-
+    RETURN_TYPES = (ANY,)
     CATEGORY = "RectumFire/UX"
 
     @classmethod
@@ -31,9 +30,8 @@ class RectumFireDone:
 
     def nop(self, any, enable):
         enabled = bool(enable[0]) if isinstance(enable, list) and enable else bool(enable)
-
         if not enabled:
-            return {"ui": {}, "result": ()}
+            return {"ui": {}, "result": (any,)}
 
-        # IMPORTANT: ui values must be iterable (list)
-        return {"ui": {"rf_done": [1]}, "result": ()}
+        # UI payload is optional; keep it minimal.
+        return {"ui": {"rf_gif": [1]}, "result": (any,)}

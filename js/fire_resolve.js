@@ -1,19 +1,20 @@
 // FireResolve — RectumFire DOM tosters + node coloring
-// Hotkey: Shift+Alt+R (layout-independent via e.code)
+// Hotkey: Shift+Alt+R (raw keydown; robust listener attach)
 
 import { app } from "../../scripts/app.js";
 import { firetosterShow } from "./fire_toster.js";
 
 const RF = Object.freeze({
   EXT_NAME: "RectumFire.FireResolve",
-  HOTKEY: { code: "KeyR", shiftKey: true, altKey: true },
-  GLOBAL_GUARD_KEY: "__rf_fire_resolve_registered__",
+  // IMPORTANT: do NOT use the old guard as an early-return gate.
+  // Use a dedicated listener guard so updates can't "brick" the handler.
+  LISTENER_GUARD: "__rf_fire_resolve_listener_attached__",
+  HOTKEY: { key: "r", shiftKey: true, altKey: true },
 });
 
-// Node colors (match toster palette; bg is darker tint, stroke is outline, fg is accent)
 const MARK = Object.freeze({
-  green:   { bg: "#0A2616", stroke: "#114A29", fg: "#22C55E" },
-  violet:  { bg: "#171524", stroke: "#624B89", fg: "#8F60F4" },
+  green: { bg: "#0A2616", stroke: "#114A29", fg: "#22C55E" },
+  violet: { bg: "#171524", stroke: "#624B89", fg: "#8F60F4" },
   magenta: { bg: "#2D0C20", stroke: "#901F4A", fg: "#DC6C98" },
 });
 
@@ -30,154 +31,245 @@ function isComboWidget(w) {
 
 function getSelectedNodeSafe() {
   const cnv = app?.canvas;
-  const sel = cnv?.selected_nodes;
-  if (!sel) return null;
 
-  const keys = Object.keys(sel);
-  if (!keys.length) return null;
+  // 1) Classic: selected_nodes map
+  const selMap = cnv?.selected_nodes;
+  if (selMap && typeof selMap === "object") {
+    const keys = Object.keys(selMap);
+    if (keys.length) return selMap[keys[0]] || null;
+  }
 
-  return sel[keys[0]] || null;
+  // 2) Fallback: current_node
+  if (cnv?.current_node) return cnv.current_node;
+
+  // 3) Legacy: selected_node
+  if (cnv?.selected_node) return cnv.selected_node;
+
+  return null;
 }
 
-// toster output: EXACT 2 lines, no extra prefixes
-function showtoster(theme, line1, line2, lifeMs) {
-  firetosterShow({
-    theme,
-    title: "🔥 Fire Resolve",
-    sub: `${line1}\n${line2}`,
-    lifeMs,
-  });
+function getWidgetByName(node, name) {
+  if (!node || !Array.isArray(node.widgets) || !name) return null;
+  for (const w of node.widgets) {
+    if (w && w.name === name) return w;
+  }
+  return null;
 }
 
-// Node coloring: ONLY via node properties (no drawing hooks)
+function findAnyPathWidget(node) {
+  if (!node || !Array.isArray(node.widgets)) return null;
+
+  // Priority list: known widget names
+  const preferred = ["lora_name", "lora", "lora_1", "lora_2", "loras", "lora_model", "unet_name", "clip_name", "vae_name", "model_name", "ckpt_name", "checkpoint", "path", "file"];
+  for (const n of preferred) {
+    const w = getWidgetByName(node, n);
+    if (w && typeof w.value === "string") return w;
+  }
+
+  // Otherwise: any string widget that looks like a path or model id
+  for (const w of node.widgets) {
+    if (!w) continue;
+    if (typeof w.value !== "string") continue;
+    const v = w.value;
+    if (!v) continue;
+    if (v.includes("\\") || v.includes("/") || v.includes(".safetensors") || v.includes(".gguf")) return w;
+  }
+
+  return null;
+}
+
 function markNode(node, theme) {
+  try {
+    node["__rf_fire_resolve_mark__"] = theme;
+    node.setDirtyCanvas(true, true);
+  } catch (_) { }
+}
+
+function patchNodeDraw(node) {
   if (!node) return;
 
-  const pal = MARK[theme] || MARK.violet;
+  const RF_DRAW_GUARD = "__rf_fire_resolve_draw_patched__";
+  const RF_MARK_KEY = "__rf_fire_resolve_mark__";
 
-  // Mark state (optional; doesn't affect rendering)
-  node.__rf_fire_checked = true;
-  node.__rf_fire_theme = theme;
+  if (node[RF_DRAW_GUARD]) return;
+  node[RF_DRAW_GUARD] = true;
 
-  // These three are the standard LiteGraph node styling knobs.
-  // They affect header / body / outline (and the left dot in many themes).
-  try {
-    node.bgcolor = pal.bg;     // node body background
-    node.color = pal.bg;       // header background (often uses node.color)
-    node.boxcolor = pal.fg;    // outline/accent (often affects dots/lines)
-  } catch (_) {}
+  const orig = node.onDrawForeground;
 
-  // Force redraw of this node
-  try {
-    node.setDirtyCanvas?.(true, true);
-  } catch (_) {}
+  node.onDrawForeground = function onDrawForegroundRF(ctx) {
+    // Preserve existing node foreground drawing.
+    try {
+      if (typeof orig === "function") orig.call(this, ctx);
+    } catch (_) { }
+
+    // Draw marker over the native collapse circle.
+    try {
+      const theme = this?.[RF_MARK_KEY];
+      if (!theme) return;
+
+      const pal = MARK[theme] || MARK.violet;
+
+      // Title height (node-local coords, title is drawn above body)
+      const titleH =
+        (typeof this?.title_height === "number" && this.title_height) ||
+        (typeof LiteGraph?.NODE_TITLE_HEIGHT === "number" && LiteGraph.NODE_TITLE_HEIGHT) ||
+        30;
+
+      // Native collapse radius from LiteGraph
+      const collapseR =
+        (typeof LiteGraph?.NODE_COLLAPSE_RADIUS === "number" && LiteGraph.NODE_COLLAPSE_RADIUS) ||
+        8;
+
+      // Exact center of native collapse circle
+      const cx = collapseR + 6;
+      const cy = -titleH * 0.5;
+      const r = collapseR - 2;
+
+      ctx.save();
+      ctx.globalAlpha = 1;
+      ctx.beginPath();
+      ctx.arc(cx, cy, r, 0, Math.PI * 2);
+      ctx.fillStyle = pal.fg;
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = pal.stroke;
+      ctx.stroke();
+      ctx.restore();
+    } catch (_) { }
+  };
 }
 
-function resolveComboWidget(widget) {
-  const current = widget.value;
-  const values = widget.options.values;
 
-  if (typeof current !== "string") return { kind: "skip" };
+function showtoster(theme, title, lines, ms = 5000) {
+  try {
+    const sub = Array.isArray(lines) ? lines.map(x => String(x ?? "")).join("\n") : String(lines ?? "");
+    firetosterShow({
+      theme: theme || "violet",
+      title: title || "Fire Resolve",
+      sub,
+      lifeMs: ms,
+    });
+  } catch (_) { }
+}
 
-  // exact match already
-  if (values.includes(current)) return { kind: "alreadyOk", value: current };
+function resolvePathFromCombos(widget, desiredBase) {
+  if (!widget || !isComboWidget(widget)) return null;
+  if (!desiredBase) return null;
 
-  const bn = basename(current);
-  if (!bn) return { kind: "skip" };
+  const vals = widget.options.values;
+  const b = desiredBase.toLowerCase();
 
-  const match = values.find((v) => basename(v) === bn);
-  if (!match) return { kind: "missing", name: bn, from: current };
+  // exact basename match first
+  for (const v of vals) {
+    const bn = basename(v).toLowerCase();
+    if (bn === b) return v;
+  }
 
-  widget.value = match;
-  return { kind: "corrected", name: bn, from: current, to: match };
+  // then partial match
+  for (const v of vals) {
+    const bn = basename(v).toLowerCase();
+    if (bn.includes(b)) return v;
+  }
+
+  return null;
 }
 
 function resolveSelectedNode() {
   const node = getSelectedNodeSafe();
-
   if (!node) {
-    showtoster("violet", "No node selected", "Enjoy!", 5500);
+    showtoster("magenta", "No node selected", ["Select a node and press Shift+Alt+R."], 3500);
     return;
   }
 
-  const widgets = Array.isArray(node.widgets) ? node.widgets : [];
-  const comboWidgets = widgets.filter(isComboWidget);
+  // Patch draw once so we can mark it.
+  patchNodeDraw(node);
 
-  if (!comboWidgets.length) {
-    showtoster("violet", "No resolvable fields", "Enjoy!", 5500);
-    return;
-  }
-
-  const corrected = [];
-  const missing = [];
-
-  for (const w of comboWidgets) {
-    const r = resolveComboWidget(w);
-    if (r.kind === "corrected") corrected.push(r.name);
-    else if (r.kind === "missing") missing.push(r.name);
-  }
-
-  // Force full redraw (graph + canvas)
-  try {
-    app.graph?.setDirtyCanvas?.(true, true);
-  } catch (_) {}
-
-  // STATES (exact wording style like your tosters)
-  if (corrected.length) {
-    if (missing.length) {
-      // Partial counts as error theme (magenta)
-      markNode(node, "magenta");
-      showtoster("magenta", "Model not found", `Tried candidate field: ${missing.length}`, 6500);
-      return;
-    }
-
-    markNode(node, "green");
-
-    if (corrected.length === 1) {
-      showtoster("green", "Path corrected", `Update: ${corrected[0]}`, 4500);
-      return;
-    }
-
-    showtoster("green", "Path corrected", `Update: ${corrected.length} items`, 4500);
-    return;
-  }
-
-  if (missing.length) {
+  // Find a relevant widget to fix.
+  const w = findAnyPathWidget(node);
+  if (!w) {
     markNode(node, "magenta");
-    showtoster("magenta", "Model not found", `Tried candidate field: ${missing.length}`, 6500);
+    showtoster("magenta", "No path widget found", ["This node has no string/combo widget that looks like a model path."], 5000);
     return;
   }
 
-  // All combo fields already ok
-  markNode(node, "violet");
-  showtoster("violet", "Already correct", "Enjoy!", 5500);
-}
+  const current = w.value;
 
-function hotkeyMatches(e) {
-  if (!e || e.repeat) return false;
-  if (e.code !== RF.HOTKEY.code) return false;
-  if (!!e.shiftKey !== RF.HOTKEY.shiftKey) return false;
-  if (!!e.altKey !== RF.HOTKEY.altKey) return false;
-  return true;
+  // If this is not a combo widget, we can't auto-fix safely (no candidates list).
+  if (!isComboWidget(w)) {
+    markNode(node, "magenta");
+    showtoster("magenta", "Widget is not a combo", [`Widget "${w.name}" is not a combo list, cannot resolve automatically.`], 5500);
+    return;
+  }
+
+  // Determine "desired" basename from current value.
+  const desiredBase = basename(current);
+  if (!desiredBase) {
+    markNode(node, "magenta");
+    showtoster("magenta", "Empty value", [`Widget "${w.name}" value is empty.`], 4500);
+    return;
+  }
+
+  // Try to resolve the proper candidate.
+  const fixed = resolvePathFromCombos(w, desiredBase);
+
+  if (!fixed) {
+    markNode(node, "magenta");
+    showtoster("magenta", "Model not found", [`No candidate in "${w.name}" matches "${desiredBase}".`], 6500);
+    return;
+  }
+
+  // Determine state:
+  // - violet: already correct (exact match)
+  // - green: changed to a different (corrected) candidate
+  const isSame = fixed === current;
+
+  if (!isSame) {
+    w.value = fixed;
+    try {
+      if (typeof w.callback === "function") w.callback(w.value, app.canvas, node, w);
+    } catch (_) { }
+    try {
+      node.setDirtyCanvas(true, true);
+    } catch (_) { }
+    markNode(node, "green");
+    showtoster("green", "Path fixed", [`${w.name}:`, `${current}`, "→", `${fixed}`], 6500);
+  } else {
+    markNode(node, "violet");
+    showtoster("violet", "Path OK", [`${w.name}: ${current}`], 3500);
+  }
 }
 
 function onKeyDown(e) {
-  const tag = (e.target?.tagName || "").toLowerCase();
-  if (tag === "input" || tag === "textarea" || e.target?.isContentEditable) return;
+  try {
+    if (!e) return;
+    const k = String(e.key || "").toLowerCase();
+    if (k !== RF.HOTKEY.key) return;
+    if (!!e.shiftKey !== !!RF.HOTKEY.shiftKey) return;
+    if (!!e.altKey !== !!RF.HOTKEY.altKey) return;
 
-  if (!hotkeyMatches(e)) return;
+    // Avoid messing with inputs.
+    const tag = (e.target && e.target.tagName) ? String(e.target.tagName).toLowerCase() : "";
+    if (tag === "input" || tag === "textarea" || tag === "select") return;
 
-  e.preventDefault();
-  e.stopPropagation();
-  resolveSelectedNode();
+    e.preventDefault();
+    e.stopPropagation();
+    resolveSelectedNode();
+  } catch (_) { }
+}
+
+function attachListenerOnce() {
+  try {
+    const g = globalThis;
+    if (g[RF.LISTENER_GUARD]) return;
+    g[RF.LISTENER_GUARD] = true;
+
+    window.addEventListener("keydown", onKeyDown, { capture: true });
+  } catch (_) { }
 }
 
 app.registerExtension({
   name: RF.EXT_NAME,
-  setup() {
-    if (window[RF.GLOBAL_GUARD_KEY]) return;
-    window[RF.GLOBAL_GUARD_KEY] = true;
-
-    window.addEventListener("keydown", onKeyDown, { capture: true });
+  async setup() {
+    attachListenerOnce();
   },
 });
