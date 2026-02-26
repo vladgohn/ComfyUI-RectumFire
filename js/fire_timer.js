@@ -257,6 +257,29 @@ function getNodeTheme(node, nowMs) {
 }
 
 // ---------------- timer core ----------------
+// Title animation (Braille "equalizer" style)
+// Single-cell braille frames (looks like a tiny level meter / activity noise)
+const TITLE_FRAMES = [
+  "⣀","⣄","⣆","⣇","⣧","⣷","⣿","⣾","⣽","⣻","⢿","⡿","⠿","⠾","⠽","⠻","⠟","⠏","⠋","⠉",
+];
+
+function titleFrameAt(nowMs) {
+  // 90ms cadence feels snappy but not epileptic
+  return TITLE_FRAMES[Math.floor(nowMs / 90) % TITLE_FRAMES.length];
+}
+
+function setTitleAnimated(node, nowMs) {
+  // Keep it tiny (3-4 glyph budget). Flame + 1 braille cell.
+  const t = `🔥${titleFrameAt(nowMs)}`;
+  if (node.title !== t) node.title = t;
+}
+
+function setTitleIdle(node) {
+  // No word/title when idle. Keep a single glyph so the header area stays consistent.
+  const t = "🔥";
+  if (node.title !== t) node.title = t;
+}
+
 const Timer = {
   startTime: 0,
   elapsedMs: 0,
@@ -279,12 +302,14 @@ const Timer = {
 
   tick() {
     // Update elapsed based on current run start
-    this.elapsedMs = Date.now() - this.startTime;
+    const now = Date.now();
+    this.elapsedMs = now - this.startTime;
 
     const str = this.format(this.elapsedMs);
     for (const n of this.nodes) {
       n._rf_timerStr = str;
       setNodeRunning(n, true);
+      setTitleAnimated(n, now);
     }
 
     try {
@@ -296,9 +321,17 @@ const Timer = {
     if (this.running) return;
     this.running = true;
 
-    this.startTime = Date.now() - (this.elapsedMs || 0);
+    // Reset ONLY on new run
+    this.elapsedMs = 0;
+    this.startTime = Date.now();
 
-    // 200ms update rate feels right for CC display without flicker
+    // Optional: immediately show zeros
+    for (const n of this.nodes) {
+      n._rf_timerStr = this.format(0);
+      setNodeRunning(n, true);
+      setTitleAnimated(n, Date.now());
+    }
+
     this.intervalId = setInterval(() => this.tick(), 200);
     this.tick();
   },
@@ -317,6 +350,7 @@ const Timer = {
     for (const n of this.nodes) {
       n._rf_timerStr = str;
       setNodeRunning(n, false);
+      setTitleIdle(n);
     }
 
     try {
@@ -412,7 +446,7 @@ function patchNodeType(nodeType) {
       Timer.nodes.add(this);
 
       try {
-        this.title = "🔥Timer";
+        this.title = "🔥";
         if (typeof LiteGraph !== "undefined" && LiteGraph.NO_TITLE != null) {
           this.title_mode = LiteGraph.NO_TITLE;
         } else {
