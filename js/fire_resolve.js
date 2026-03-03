@@ -56,26 +56,52 @@ function getWidgetByName(node, name) {
   return null;
 }
 
-function findAnyPathWidget(node) {
-  if (!node || !Array.isArray(node.widgets)) return null;
+function isLikelyModelText(value) {
+  const v = String(value || "").toLowerCase();
+  if (!v) return false;
+  if (v.includes("/") || v.includes("\\")) return true;
+  const exts = [".safetensors", ".gguf", ".ckpt", ".pt", ".pth", ".bin", ".onnx"];
+  return exts.some((ext) => v.includes(ext));
+}
 
-  // Priority list: known widget names
-  const preferred = ["lora_name", "lora", "lora_1", "lora_2", "loras", "lora_model", "unet_name", "clip_name", "vae_name", "model_name", "ckpt_name", "checkpoint", "path", "file"];
-  for (const n of preferred) {
-    const w = getWidgetByName(node, n);
-    if (w && typeof w.value === "string") return w;
+function comboHasLikelyModelValues(widget) {
+  if (!isComboWidget(widget)) return false;
+  const vals = widget.options.values || [];
+  let checked = 0;
+  for (const v of vals) {
+    if (typeof v !== "string") continue;
+    checked += 1;
+    if (isLikelyModelText(v)) return true;
+    if (checked >= 60) break; // avoid scanning huge lists fully every keypress
   }
+  return false;
+}
 
-  // Otherwise: any string widget that looks like a path or model id
+function findPathWidgets(node) {
+  if (!node || !Array.isArray(node.widgets)) return [];
+
+  const out = [];
+  const used = new Set();
+  const preferred = ["lora_name", "lora", "lora_1", "lora_2", "loras", "lora_model", "unet_name", "clip_name", "vae_name", "model_name", "ckpt_name", "checkpoint", "path", "file", "control_net_name"];
+
+  const add = (w) => {
+    if (!w || used.has(w)) return;
+    if (typeof w.value !== "string") return;
+    used.add(w);
+    out.push(w);
+  };
+
+  for (const n of preferred) add(getWidgetByName(node, n));
+
   for (const w of node.widgets) {
-    if (!w) continue;
+    if (!w || used.has(w)) continue;
     if (typeof w.value !== "string") continue;
-    const v = w.value;
+    const v = String(w.value || "");
     if (!v) continue;
-    if (v.includes("\\") || v.includes("/") || v.includes(".safetensors") || v.includes(".gguf")) return w;
+    if (isLikelyModelText(v) || comboHasLikelyModelValues(w)) add(w);
   }
 
-  return null;
+  return out;
 }
 
 function markNode(node, theme) {
@@ -156,22 +182,84 @@ function resolvePathFromCombos(widget, desiredBase) {
   if (!widget || !isComboWidget(widget)) return null;
   if (!desiredBase) return null;
 
-  const vals = widget.options.values;
-  const b = desiredBase.toLowerCase();
+  const vals = widget.options.values || [];
+  const onlyStrings = vals.filter(v => typeof v === "string");
+  if (!onlyStrings.length) return null;
 
-  // exact basename match first
-  for (const v of vals) {
-    const bn = basename(v).toLowerCase();
-    if (bn === b) return v;
+  const norm = (s) => String(s || "").trim().replaceAll("\\", "/").toLowerCase();
+  const stem = (s) => {
+    const b = basename(s);
+    const i = b.lastIndexOf(".");
+    return (i > 0 ? b.slice(0, i) : b).toLowerCase();
+  };
+
+  const desiredRaw = norm(desiredBase);
+  const desiredBn = norm(basename(desiredBase));
+  const desiredStem = stem(desiredBase);
+
+  const uniqueOrNull = (arr) => {
+    if (!arr.length) return null;
+    if (arr.length === 1) return arr[0];
+    return null;
+  };
+
+  // 0) exact full value match (normalized)
+  const fullEq = onlyStrings.filter((v) => norm(v) === desiredRaw);
+  {
+    const u = uniqueOrNull(fullEq);
+    if (u) return u;
   }
 
-  // then partial match
-  for (const v of vals) {
-    const bn = basename(v).toLowerCase();
-    if (bn.includes(b)) return v;
+  // 1) exact basename match
+  const baseEq = onlyStrings.filter((v) => norm(basename(v)) === desiredBn);
+  {
+    const u = uniqueOrNull(baseEq);
+    if (u) return u;
+  }
+
+  // 2) exact stem match (ignores extension differences)
+  if (desiredStem) {
+    const stemEq = onlyStrings.filter((v) => stem(v) === desiredStem);
+    const u = uniqueOrNull(stemEq);
+    if (u) return u;
   }
 
   return null;
+}
+
+function resolveWidget(node, w) {
+  const current = w?.value;
+  if (typeof current !== "string" || !current) {
+    return { state: "fail", reason: `Widget "${w?.name || "?"}" has empty value.` };
+  }
+
+  if (!isComboWidget(w)) {
+    return { state: "skip", reason: `Widget "${w.name}" is not a combo list.` };
+  }
+
+  const desiredBase = String(current || "");
+  if (!desiredBase) {
+    return { state: "fail", reason: `Widget "${w.name}" value is empty.` };
+  }
+
+  const fixed = resolvePathFromCombos(w, desiredBase);
+  if (!fixed) {
+    return { state: "fail", reason: `No candidate in "${w.name}" matches "${desiredBase}".` };
+  }
+
+  const isSame = fixed === current;
+  if (!isSame) {
+    w.value = fixed;
+    try {
+      if (typeof w.callback === "function") w.callback(w.value, app.canvas, node, w);
+    } catch (_) { }
+    try {
+      node.setDirtyCanvas(true, true);
+    } catch (_) { }
+    return { state: "fixed", from: current, to: fixed, name: w.name };
+  }
+
+  return { state: "ok", name: w.name, value: current };
 }
 
 function resolveSelectedNode() {
@@ -181,62 +269,43 @@ function resolveSelectedNode() {
     return;
   }
 
-  // Patch draw once so we can mark it.
   patchNodeDraw(node);
 
-  // Find a relevant widget to fix.
-  const w = findAnyPathWidget(node);
-  if (!w) {
+  const widgets = findPathWidgets(node);
+  if (!widgets.length) {
     markNode(node, "magenta");
-    showtoster("magenta", "No path widget found", ["This node has no string/combo widget that looks like a model path."], 5000);
+    showtoster("magenta", "No model widgets found", ["This node has no model-like path/combo widgets."], 5000);
     return;
   }
 
-  const current = w.value;
+  let totalFixed = 0;
+  let totalOk = 0;
+  let totalFail = 0;
+  let totalSkip = 0;
 
-  // If this is not a combo widget, we can't auto-fix safely (no candidates list).
-  if (!isComboWidget(w)) {
-    markNode(node, "magenta");
-    showtoster("magenta", "Widget is not a combo", [`Widget "${w.name}" is not a combo list, cannot resolve automatically.`], 5500);
+  for (const w of widgets) {
+    const r = resolveWidget(node, w);
+    if (r.state === "fixed") totalFixed += 1;
+    else if (r.state === "ok") totalOk += 1;
+    else if (r.state === "skip") totalSkip += 1;
+    else totalFail += 1;
+  }
+
+  if (totalFail > 0) markNode(node, "magenta");
+  else if (totalFixed > 0) markNode(node, "green");
+  else markNode(node, "violet");
+
+  if (totalFail > 0) {
+    showtoster("magenta", "Resolve finished", [`Fixed: ${totalFixed}`, `Already OK: ${totalOk}`, `Failed: ${totalFail}`, `Skipped: ${totalSkip}`], 6000);
     return;
   }
 
-  // Determine "desired" basename from current value.
-  const desiredBase = basename(current);
-  if (!desiredBase) {
-    markNode(node, "magenta");
-    showtoster("magenta", "Empty value", [`Widget "${w.name}" value is empty.`], 4500);
+  if (totalFixed > 0) {
+    showtoster("green", "Resolve finished", [`Fixed: ${totalFixed}`, `Already OK: ${totalOk}`], 5000);
     return;
   }
 
-  // Try to resolve the proper candidate.
-  const fixed = resolvePathFromCombos(w, desiredBase);
-
-  if (!fixed) {
-    markNode(node, "magenta");
-    showtoster("magenta", "Model not found", [`No candidate in "${w.name}" matches "${desiredBase}".`], 6500);
-    return;
-  }
-
-  // Determine state:
-  // - violet: already correct (exact match)
-  // - green: changed to a different (corrected) candidate
-  const isSame = fixed === current;
-
-  if (!isSame) {
-    w.value = fixed;
-    try {
-      if (typeof w.callback === "function") w.callback(w.value, app.canvas, node, w);
-    } catch (_) { }
-    try {
-      node.setDirtyCanvas(true, true);
-    } catch (_) { }
-    markNode(node, "green");
-    showtoster("green", "Path fixed", [`${w.name}:`, `${current}`, "→", `${fixed}`], 6500);
-  } else {
-    markNode(node, "violet");
-    showtoster("violet", "Path OK", [`${w.name}: ${current}`], 3500);
-  }
+  showtoster("violet", "Path OK", [`Already OK: ${totalOk}`, `Skipped: ${totalSkip}`], 3200);
 }
 
 function onKeyDown(e) {

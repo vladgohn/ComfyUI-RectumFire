@@ -1,26 +1,16 @@
 import { app } from "../../scripts/app.js";
+import { firetosterShow } from "./fire_toster.js";
 
-function overlay(text, ms = 1200) {
-  const id = "__rf_overlay__";
-  let el = document.getElementById(id);
-  if (!el) {
-    el = document.createElement("div");
-    el.id = id;
-    el.style.position = "fixed";
-    el.style.right = "14px";
-    el.style.top = "14px";
-    el.style.zIndex = "999999";
-    el.style.padding = "10px 12px";
-    el.style.borderRadius = "10px";
-    el.style.background = "rgba(0,0,0,.85)";
-    el.style.color = "#fff";
-    el.style.font = "12px system-ui";
-    document.body.appendChild(el);
-  }
-  el.textContent = text;
-  el.style.display = "block";
-  clearTimeout(el._t);
-  el._t = setTimeout(() => el.style.display = "none", ms);
+function showtoster(theme, title, lines, ms = 2500) {
+  try {
+    const sub = Array.isArray(lines) ? lines.map(x => String(x ?? "")).join("\n") : String(lines ?? "");
+    firetosterShow({
+      theme: theme || "green",
+      title: title || "Fire Copy",
+      sub,
+      lifeMs: ms,
+    });
+  } catch (_) { }
 }
 
 async function copy(text) {
@@ -63,6 +53,94 @@ function extractPureNode(node) {
   };
 }
 
+function basename(p) {
+  if (typeof p !== "string" || !p) return "";
+  const t = p.replaceAll("\\", "/");
+  const parts = t.split("/");
+  return parts[parts.length - 1] || "";
+}
+
+function pushString(list, v) {
+  if (typeof v === "string" && v) list.push(v);
+}
+
+function collectStringsDeep(value, out, depth = 0) {
+  if (depth > 6 || value == null) return;
+  if (typeof value === "string") {
+    pushString(out, value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) collectStringsDeep(v, out, depth + 1);
+    return;
+  }
+  if (typeof value === "object") {
+    for (const v of Object.values(value)) collectStringsDeep(v, out, depth + 1);
+  }
+}
+
+function collectStringCandidates(node) {
+  const out = [];
+  if (!node) return out;
+
+  if (Array.isArray(node.widgets)) {
+    for (const w of node.widgets) {
+      collectStringsDeep(w?.value, out);
+    }
+  }
+
+  if (Array.isArray(node.widgets_values)) {
+    collectStringsDeep(node.widgets_values, out);
+  }
+
+  collectStringsDeep(node?.properties, out);
+
+  return out;
+}
+
+function cleanModelName(s) {
+  if (!s) return "";
+  return String(s)
+    .trim()
+    .replace(/^["'`]+|["'`]+$/g, "")
+    .replace(/[),;\]}]+$/g, "")
+    .trim();
+}
+
+function extractModelNames(node) {
+  const texts = collectStringCandidates(node);
+  if (!texts.length) return [];
+
+  const ext = "(?:safetensors|gguf|ckpt|pt|pth|bin|onnx)";
+  // Capture model-like chunks; allow spaces, paths, and mixed separators.
+  const re = new RegExp(`([^\\n\\r"'\\\`]+?\\.${ext})`, "gi");
+  const names = [];
+  const seen = new Set();
+
+  const addName = (candidate) => {
+    const name = cleanModelName(basename(candidate));
+    const key = name.toLowerCase();
+    if (!name || seen.has(key)) return;
+    seen.add(key);
+    names.push(name);
+  };
+
+  for (const text of texts) {
+    const raw = String(text || "");
+    const direct = cleanModelName(raw);
+    if (new RegExp(`\\.${ext}$`, "i").test(direct)) {
+      addName(direct);
+    }
+
+    let m;
+    while ((m = re.exec(raw)) !== null) {
+      addName(m[1] || "");
+    }
+  }
+
+  return names;
+}
+
 function setLast(text) {
   try { window.__rf_copy_last__ = String(text ?? ""); } catch {}
 }
@@ -82,7 +160,7 @@ function getMousePos() {
 function createFireNoteAtMouse(text) {
   const g = app.graph || app.canvas?.graph;
   if (!g) {
-    overlay("Fire Paste: no graph");
+    showtoster("magenta", "Fire Paste", ["No graph found."]);
     return false;
   }
 
@@ -93,7 +171,7 @@ function createFireNoteAtMouse(text) {
     try { node = LiteGraph.createNode("RectumFire Sticker Note"); } catch {}
   }
   if (!node) {
-    overlay("Fire Paste: FireNote not found");
+    showtoster("magenta", "Fire Paste", ["FireNote node type not found."]);
     return false;
   }
 
@@ -111,35 +189,33 @@ function createFireNoteAtMouse(text) {
 
 async function action(node) {
   if (!node) {
-    overlay("Fire Copy: no node");
+    showtoster("magenta", "Fire Copy", ["No node selected."]);
     return;
   }
 
-  const pure = extractPureNode(node);
-  const json = JSON.stringify(pure, null, 2);
-
-  const matches = json.match(/([^\\/"]+\.safetensors)/gi);
-  if (matches && matches.length) {
-    const unique = [...new Set(matches)];
-    const out = unique.join("\n");
+  const names = extractModelNames(node);
+  if (names.length) {
+    const out = names.join("\n");
     const ok = await copy(out);
     if (ok) setLast(out);
-    overlay(ok ? `Fire Copy: ${unique.length} model(s)` : "Fire Copy: error");
+    showtoster(ok ? "green" : "magenta", "Fire Copy", ok ? [`Copied ${names.length} model(s).`] : ["Copy error."]);
   } else {
+    const pure = extractPureNode(node);
+    const json = JSON.stringify(pure, null, 2);
     const ok = await copy(json);
     if (ok) setLast(json);
-    overlay(ok ? "Fire Copy: JSON copied" : "Fire Copy: error");
+    showtoster(ok ? "violet" : "magenta", "Fire Copy", ok ? ["JSON copied."] : ["Copy error."]);
   }
 }
 
 function paste() {
   const text = getLast();
   if (!text) {
-    overlay("Fire Paste: empty");
+    showtoster("magenta", "Fire Paste", ["Clipboard buffer is empty."]);
     return;
   }
   const ok = createFireNoteAtMouse(text);
-  if (ok) overlay("Fire Paste: pasted");
+  if (ok) showtoster("green", "Fire Paste", ["Pasted into FireNote."]);
 }
 
 function install() {

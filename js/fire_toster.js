@@ -190,11 +190,13 @@ const FireDomtoster = (() => {
     const head = parts[0] || "";
     const detail = parts[1] || "";
 
+    const safeTitle = escapeHtml(title || "Fire Resolve");
+
     el.innerHTML = `
       <div class="${CLS.titleRow}">
         <div style="display:flex; align-items:center; gap:8px;">
           <div style="font-size:16px;">🔥</div>
-          <div class="${CLS.title}" style="color:${pal.fg}">Fire Resolve</div>
+          <div class="${CLS.title}" style="color:${pal.fg}">${safeTitle}</div>
         </div>
         <div class="${CLS.close}" aria-label="close" style="color:${pal.fg}">×</div>
       </div>

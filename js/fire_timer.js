@@ -18,8 +18,8 @@ const EYES_ASSET = {
   srcH: 67,
 
   // FIXED draw size in canvas pixels (no scaling with node size)
-  drawW: 86/1.5,      // 86/2
-  drawH: 67/1.5,      // 67/2
+  drawW: 86/1.7,      // 86/2
+  drawH: 67/1.7,      // 67/2
 
   // pupil dx in SOURCE pixels, converted to draw pixels by (drawW/srcW)
   dxSrcMax: 13,
@@ -29,7 +29,7 @@ const EYES_ASSET = {
 
   // Anchor constants (canvas px)
   padRight: 10,
-  popOutPx: 50,   // tune this only
+  popOutPx: 45,   // tune this only
 
   baseImg: null,
   pupilImg: null,
@@ -123,8 +123,8 @@ const STYLE = {
   padding: 6,
   radius: 8,
 
-  minW: 200,
-  minH: 72,
+  defaultW: 140,
+  defaultH: 50,
 
   tickMs: 60,
 
@@ -433,10 +433,10 @@ function patchNodeType(nodeType) {
   const origOnNodeCreated = nodeType.prototype.onNodeCreated;
   nodeType.prototype.onNodeCreated = function () {
     try {
-      this.size = [
-        Math.max(this.size?.[0] || 0, STYLE.minW),
-        Math.max(this.size?.[1] || 0, STYLE.minH),
-      ];
+      // Set compact default for newly added nodes.
+      // Saved workflow sizes are applied later by Comfy/LiteGraph configure path.
+      this.size = [STYLE.defaultW, STYLE.defaultH];
+      this.setSize?.(this.size);
 
       // Default string: show last known elapsed (or zeros)
       this._rf_timerStr = this._rf_timerStr || Timer.format(Timer.elapsedMs || 0);

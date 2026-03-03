@@ -1,4 +1,4 @@
-__pycache__/
-*.pyc
-Thumbs.db
-desktop.ini
+__pycache__
+fire_mask.js
+fire_sketch.js
+fire_test.js
