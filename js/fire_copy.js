@@ -107,12 +107,56 @@ function cleanModelName(s) {
     .trim();
 }
 
+function isComboWidget(w) {
+  return !!(w && w.options && Array.isArray(w.options.values) && w.options.values.length);
+}
+
+function walkGraph(graph, cb) {
+  const nodes = graph?._nodes || graph?.nodes || [];
+  for (const n of nodes) {
+    cb(n, graph);
+    if (n?.subgraph) walkGraph(n.subgraph, cb);
+  }
+}
+
+function collectAvailableModelKeys() {
+  const out = new Set();
+  const root = app?.graph;
+  if (!root) return out;
+
+  const extRe = /\.(safetensors|gguf|ckpt|pt|pth|bin|onnx)\b/i;
+  walkGraph(root, (node) => {
+    const widgets = node?.widgets || [];
+    for (const w of widgets) {
+      if (!isComboWidget(w)) continue;
+      for (const v of (w.options?.values || [])) {
+        if (typeof v !== "string") continue;
+        const b = cleanModelName(basename(v));
+        if (!b || !extRe.test(b)) continue;
+        out.add(b.toLowerCase());
+      }
+    }
+  });
+  return out;
+}
+
+function buildNoteMarkedList(names) {
+  const keys = collectAvailableModelKeys();
+  const lines = [];
+  for (const n of names) {
+    const clean = cleanModelName(basename(n));
+    if (!clean) continue;
+    const ok = keys.has(clean.toLowerCase());
+    lines.push(`${ok ? "✅" : "❌"} ${clean}`);
+  }
+  return lines.join("\n");
+}
+
 function extractModelNames(node) {
   const texts = collectStringCandidates(node);
   if (!texts.length) return [];
 
   const ext = "(?:safetensors|gguf|ckpt|pt|pth|bin|onnx)";
-  // Capture model-like chunks; allow spaces, paths, and mixed separators.
   const re = new RegExp(`([^\\n\\r"'\\\`]+?\\.${ext})`, "gi");
   const names = [];
   const seen = new Set();
@@ -147,6 +191,14 @@ function setLast(text) {
 
 function getLast() {
   try { return String(window.__rf_copy_last__ ?? ""); } catch { return ""; }
+}
+
+function setLastNote(text) {
+  try { window.__rf_copy_last_note__ = String(text ?? ""); } catch {}
+}
+
+function getLastNote() {
+  try { return String(window.__rf_copy_last_note__ ?? ""); } catch { return ""; }
 }
 
 function getMousePos() {
@@ -198,18 +250,20 @@ async function action(node) {
     const out = names.join("\n");
     const ok = await copy(out);
     if (ok) setLast(out);
+    setLastNote(buildNoteMarkedList(names));
     showtoster(ok ? "green" : "magenta", "Fire Copy", ok ? [`Copied ${names.length} model(s).`] : ["Copy error."]);
   } else {
     const pure = extractPureNode(node);
     const json = JSON.stringify(pure, null, 2);
     const ok = await copy(json);
     if (ok) setLast(json);
+    setLastNote(json);
     showtoster(ok ? "violet" : "magenta", "Fire Copy", ok ? ["JSON copied."] : ["Copy error."]);
   }
 }
 
 function paste() {
-  const text = getLast();
+  const text = getLastNote() || getLast();
   if (!text) {
     showtoster("magenta", "Fire Paste", ["Clipboard buffer is empty."]);
     return;

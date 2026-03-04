@@ -96,6 +96,9 @@ function clampSelectWidget(node) {
 }
 
 function recalc(node) {
+  if (!node || !Array.isArray(node.inputs)) return;
+  if (!node.graph) return;
+
   // Invariant: slots = connected + 1, min 2, max MAX_INPUTS
   const connected = countConnectedSlots(node);
   const target = Math.max(2, Math.min(MAX_INPUTS, connected + 1));
@@ -113,6 +116,7 @@ function scheduleRecalc(node) {
 
   setTimeout(() => {
     node.__rectumfire_switch_scheduled__ = false;
+    if (!node || !node.graph) return;
     try {
       recalc(node);
     } catch (_) {}
@@ -142,13 +146,6 @@ app.registerExtension({
     const origOnConnectionsChange = nodeType.prototype.onConnectionsChange;
     nodeType.prototype.onConnectionsChange = function () {
       const r = origOnConnectionsChange?.apply(this, arguments);
-      scheduleRecalc(this);
-      return r;
-    };
-
-    const origOnSerialize = nodeType.prototype.onSerialize;
-    nodeType.prototype.onSerialize = function (o) {
-      const r = origOnSerialize?.apply(this, arguments);
       scheduleRecalc(this);
       return r;
     };

@@ -3,7 +3,7 @@
 // UI only — no engine logic changed.
 
 const TOKENS = Object.freeze({
-  pos: { top: 14, right: 18 },
+  pos: { top: 64, right: 18 },
 
   card: {
     width: 280,
@@ -36,8 +36,7 @@ const FireDomtoster = (() => {
     hide: "rfFire__hide",
     titleRow: "rfFire__titleRow",
     title: "rfFire__title",
-    head: "rfFire__head",
-    sub: "rfFire__sub",
+    body: "rfFire__body",
     close: "rfFire__close",
   });
 
@@ -110,19 +109,14 @@ const FireDomtoster = (() => {
   line-height: 1.2;
 }
 
-.${CLS.head}{
+.${CLS.body}{
   font-size: 12px;
   font-weight: 400;
   color: #ffffff;
-  line-height: 1.2;
-  margin-bottom: 4px;
-}
-
-.${CLS.sub}{
-  font-size: 11px;
-  font-weight: 400;
-  color: #ffffff;
-  line-height: 1.2;
+  line-height: 1.35;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .${CLS.close}{
@@ -184,11 +178,7 @@ const FireDomtoster = (() => {
     el.style.border = `1px solid ${pal.stroke}`;
     el.style.pointerEvents = "none";
 
-    const safeSub = escapeHtml(sub).replaceAll("\n", "<br/>");
-    const parts = safeSub.split("<br/>");
-
-    const head = parts[0] || "";
-    const detail = parts[1] || "";
+    const safeSub = escapeHtml(sub);
 
     const safeTitle = escapeHtml(title || "Fire Resolve");
 
@@ -200,8 +190,7 @@ const FireDomtoster = (() => {
         </div>
         <div class="${CLS.close}" aria-label="close" style="color:${pal.fg}">×</div>
       </div>
-      <div class="${CLS.head}">${head}</div>
-      ${detail ? `<div class="${CLS.sub}">${detail}</div>` : ``}
+      ${safeSub ? `<div class="${CLS.body}">${safeSub}</div>` : ``}
     `;
 
     root.appendChild(el);

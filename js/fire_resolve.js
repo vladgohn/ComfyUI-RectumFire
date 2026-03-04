@@ -29,6 +29,26 @@ function isComboWidget(w) {
   return !!(w && w.options && Array.isArray(w.options.values) && w.options.values.length);
 }
 
+function toCandidateStrings(v) {
+  if (typeof v === "string") return [v];
+  if (v == null) return [];
+  if (typeof v === "number" || typeof v === "boolean") return [String(v)];
+  if (Array.isArray(v)) {
+    const out = [];
+    for (const x of v) out.push(...toCandidateStrings(x));
+    return out;
+  }
+  if (typeof v === "object") {
+    const out = [];
+    // Common option object shapes from custom widgets.
+    for (const k of ["value", "name", "title", "label", "content", "text", "path", "file"]) {
+      if (k in v) out.push(...toCandidateStrings(v[k]));
+    }
+    return out;
+  }
+  return [];
+}
+
 function getSelectedNodeSafe() {
   const cnv = app?.canvas;
 
@@ -69,10 +89,13 @@ function comboHasLikelyModelValues(widget) {
   const vals = widget.options.values || [];
   let checked = 0;
   for (const v of vals) {
-    if (typeof v !== "string") continue;
-    checked += 1;
-    if (isLikelyModelText(v)) return true;
-    if (checked >= 60) break; // avoid scanning huge lists fully every keypress
+    const strings = toCandidateStrings(v);
+    for (const s of strings) {
+      checked += 1;
+      if (isLikelyModelText(s)) return true;
+      if (checked >= 120) break; // avoid scanning huge lists fully every keypress
+    }
+    if (checked >= 120) break;
   }
   return false;
 }
@@ -86,7 +109,11 @@ function findPathWidgets(node) {
 
   const add = (w) => {
     if (!w || used.has(w)) return;
-    if (typeof w.value !== "string") return;
+    const isCombo = isComboWidget(w);
+    const hasStringValue = typeof w.value === "string";
+    const looksLikeModelString = hasStringValue && isLikelyModelText(String(w.value || ""));
+    const looksLikeModelCombo = isCombo && comboHasLikelyModelValues(w);
+    if (!looksLikeModelString && !looksLikeModelCombo) return;
     used.add(w);
     out.push(w);
   };
@@ -95,13 +122,29 @@ function findPathWidgets(node) {
 
   for (const w of node.widgets) {
     if (!w || used.has(w)) continue;
-    if (typeof w.value !== "string") continue;
-    const v = String(w.value || "");
-    if (!v) continue;
+    const v = typeof w.value === "string" ? String(w.value || "") : "";
     if (isLikelyModelText(v) || comboHasLikelyModelValues(w)) add(w);
   }
 
   return out;
+}
+
+function getWidgetStringValue(w) {
+  if (!w) return "";
+  if (typeof w.value === "string") return w.value;
+  if (isComboWidget(w)) {
+    const vals = w.options?.values || [];
+    const idx = Number(w.value);
+    if (Number.isFinite(idx) && idx >= 0 && idx < vals.length) {
+      const candidates = toCandidateStrings(vals[idx]);
+      const first = candidates.find((s) => typeof s === "string" && s.trim());
+      if (first) return first;
+    }
+    // Fallback: if combo uses direct string as current value in some UIs.
+    const direct = toCandidateStrings(w.value).find((s) => typeof s === "string" && s.trim());
+    if (direct) return direct;
+  }
+  return "";
 }
 
 function markNode(node, theme) {
@@ -178,58 +221,114 @@ function showtoster(theme, title, lines, ms = 5000) {
   } catch (_) { }
 }
 
+const MODEL_EXTS = ["safetensors", "gguf", "ckpt", "pt", "pth", "bin", "onnx"];
+
+function extractModelLikeName(raw) {
+  const s = String(raw || "").trim();
+  if (!s) return "";
+
+  // 1) Try to capture explicit filename.ext anywhere in the string.
+  const extGroup = MODEL_EXTS.join("|");
+  const re = new RegExp(`([^\\\\/\\n\\r"'\\` + "`" + `|]+?\\.(?:${extGroup}))`, "ig");
+  let m;
+  let last = "";
+  while ((m = re.exec(s)) !== null) {
+    last = String(m[1] || "").trim();
+  }
+  if (last) return last;
+
+  // 2) Common formatted values: "prefix|filename.ext"
+  if (s.includes("|")) {
+    const tail = s.split("|").pop()?.trim() || "";
+    if (tail) return tail;
+  }
+
+  // 3) Fallback: use as-is.
+  return s;
+}
+
 function resolvePathFromCombos(widget, desiredBase) {
   if (!widget || !isComboWidget(widget)) return null;
   if (!desiredBase) return null;
 
   const vals = widget.options.values || [];
-  const onlyStrings = vals.filter(v => typeof v === "string");
+  const onlyStrings = vals
+    .map((v) => {
+      if (typeof v === "string") return v;
+      const c = toCandidateStrings(v).find((s) => typeof s === "string" && s.trim());
+      return c || null;
+    })
+    .filter((v) => typeof v === "string");
   if (!onlyStrings.length) return null;
 
-  const norm = (s) => String(s || "").trim().replaceAll("\\", "/").toLowerCase();
-  const stem = (s) => {
-    const b = basename(s);
-    const i = b.lastIndexOf(".");
-    return (i > 0 ? b.slice(0, i) : b).toLowerCase();
-  };
+  const clean = (s) =>
+    String(s || "")
+      .trim()
+      .replace(/^["'`]+|["'`]+$/g, "")
+      .replace(/[),;\]}]+$/g, "")
+      .trim();
 
-  const desiredRaw = norm(desiredBase);
-  const desiredBn = norm(basename(desiredBase));
-  const desiredStem = stem(desiredBase);
+  const normPath = (s) => clean(s).replaceAll("\\", "/");
+  const norm = (s) => normPath(s).toLowerCase();
+  const desiredParsed = extractModelLikeName(desiredBase);
+  const desiredRaw = normPath(desiredParsed || desiredBase);
+  const desiredRawNorm = desiredRaw.toLowerCase();
+  const desiredBn = norm(basename(desiredRaw));
 
-  const uniqueOrNull = (arr) => {
-    if (!arr.length) return null;
-    if (arr.length === 1) return arr[0];
-    return null;
-  };
+  const prepared = onlyStrings.map((raw) => {
+    const parsed = extractModelLikeName(raw) || raw;
+    const rawNormPath = normPath(raw);
+    const parsedNormPath = normPath(parsed);
+    return {
+      raw,
+      rawNormPath,
+      rawNormLower: rawNormPath.toLowerCase(),
+      rawBaseNorm: norm(basename(rawNormPath)),
+      parsedBaseNorm: norm(basename(parsedNormPath)),
+    };
+  });
 
-  // 0) exact full value match (normalized)
-  const fullEq = onlyStrings.filter((v) => norm(v) === desiredRaw);
-  {
-    const u = uniqueOrNull(fullEq);
-    if (u) return u;
-  }
+  // 0) exact full value (case-sensitive, then case-insensitive)
+  const fullEqCase = prepared.find((c) => c.rawNormPath === desiredRaw);
+  if (fullEqCase) return fullEqCase.raw;
+  const fullEq = prepared.find((c) => c.rawNormLower === desiredRawNorm);
+  if (fullEq) return fullEq.raw;
 
-  // 1) exact basename match
-  const baseEq = onlyStrings.filter((v) => norm(basename(v)) === desiredBn);
-  {
-    const u = uniqueOrNull(baseEq);
-    if (u) return u;
-  }
-
-  // 2) exact stem match (ignores extension differences)
-  if (desiredStem) {
-    const stemEq = onlyStrings.filter((v) => stem(v) === desiredStem);
-    const u = uniqueOrNull(stemEq);
-    if (u) return u;
-  }
+  // 1) basename exact (case-insensitive)
+  const desiredBaseCase = basename(desiredRaw);
+  const baseEqCase = prepared.find((c) => basename(c.rawNormPath) === desiredBaseCase);
+  if (baseEqCase) return baseEqCase.raw;
+  const baseEq = prepared.find((c) => c.rawBaseNorm === desiredBn || c.parsedBaseNorm === desiredBn);
+  if (baseEq) return baseEq.raw;
 
   return null;
 }
 
+function setComboValue(widget, candidateRaw) {
+  if (!widget) return false;
+  if (!isComboWidget(widget)) return false;
+  const vals = widget.options?.values || [];
+
+  // Prefer exact option entry.
+  let idx = vals.findIndex((v) => typeof v === "string" && v === candidateRaw);
+  if (idx < 0) {
+    const candNorm = String(candidateRaw || "").trim().toLowerCase();
+    idx = vals.findIndex((v) => typeof v === "string" && String(v).trim().toLowerCase() === candNorm);
+  }
+
+  if (idx >= 0) {
+    widget.value = idx;
+    return true;
+  }
+
+  // Fallback for widgets expecting direct string.
+  widget.value = candidateRaw;
+  return true;
+}
+
 function resolveWidget(node, w) {
-  const current = w?.value;
-  if (typeof current !== "string" || !current) {
+  const current = getWidgetStringValue(w);
+  if (!current) {
     return { state: "fail", reason: `Widget "${w?.name || "?"}" has empty value.` };
   }
 
@@ -249,7 +348,7 @@ function resolveWidget(node, w) {
 
   const isSame = fixed === current;
   if (!isSame) {
-    w.value = fixed;
+    setComboValue(w, fixed);
     try {
       if (typeof w.callback === "function") w.callback(w.value, app.canvas, node, w);
     } catch (_) { }
@@ -292,20 +391,14 @@ function resolveSelectedNode() {
   }
 
   if (totalFail > 0) markNode(node, "magenta");
-  else if (totalFixed > 0) markNode(node, "green");
-  else markNode(node, "violet");
+  else markNode(node, "green");
 
   if (totalFail > 0) {
     showtoster("magenta", "Resolve finished", [`Fixed: ${totalFixed}`, `Already OK: ${totalOk}`, `Failed: ${totalFail}`, `Skipped: ${totalSkip}`], 6000);
     return;
   }
 
-  if (totalFixed > 0) {
-    showtoster("green", "Resolve finished", [`Fixed: ${totalFixed}`, `Already OK: ${totalOk}`], 5000);
-    return;
-  }
-
-  showtoster("violet", "Path OK", [`Already OK: ${totalOk}`, `Skipped: ${totalSkip}`], 3200);
+  showtoster("green", "Resolve finished", [`Fixed: ${totalFixed}`, `Already OK: ${totalOk}`, `Skipped: ${totalSkip}`], 5000);
 }
 
 function onKeyDown(e) {
