@@ -124,7 +124,7 @@ function scheduleRecalc(node) {
 }
 
 app.registerExtension({
-  name: "RectumFire.RectumFireSwitch",
+  name: "RectumFireSwitch",
   async beforeRegisterNodeDef(nodeType, nodeData) {
     // IMPORTANT: must match NODE_CLASS_MAPPINGS key
     if (nodeData?.name !== "RectumFireSwitch") return;

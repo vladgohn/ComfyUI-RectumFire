@@ -1,4 +1,4 @@
-# ComfyUI 🔥RectumFire
+# ComfyUI RectumFire
 
 RectumFire is a UX-focused custom node pack for ComfyUI.
 It adds utility/output nodes and frontend enhancements that make long workflows easier to monitor, debug, and operate.
@@ -38,7 +38,7 @@ No Python dependency installation is required beyond normal ComfyUI environment 
 
 ## Node Guide
 
-## 🔥Fire Timer (`RectumFireTimer`)
+## 1) Fire Timer (`RectumFireTimer`)
 
 Category: `RectumFire/UI`  
 Type: output/UI execution indicator
@@ -67,7 +67,7 @@ Use it as a compact real-time run clock for queue execution. It gives immediate 
 - It is an output node (`OUTPUT_NODE = True`), so it can serve as an execution endpoint.
 - Multiple timer nodes are synchronized by shared frontend timer state.
 
-## 🔥Fire Done (`RectumFireDone`)
+## 2) Fire Done (`RectumFireDone`)
 
 Category: `RectumFire/UX`  
 Type: output completion notifier
@@ -92,7 +92,24 @@ Use this as an explicit "completion bell" endpoint in important branches (e.g., 
 - If `enable = false`, node is effectively silent/no-op.
 - Browser audio policies may require prior user interaction with page for autoplay.
 
-## 🔥Fire Switch (`RectumFireSwitch`)
+## 3) Fire Note (`RectumFireNote`)
+
+Category: `Fire`  
+Type: utility note node
+
+### Why this node exists
+Use it as an in-graph text scratchpad for prompts, TODOs, model notes, reproducibility metadata, or experiment logs.
+
+### Behavior and features
+- Simple multiline string widget.
+- No outputs and no compute cost impact.
+- Supports keyboard-driven creation/paste via frontend helpers.
+
+### Usage notes
+- Ideal for keeping context inside workflow JSON.
+- Works well with RectumFire copy/paste hotkeys (see Hotkeys section).
+
+## 4) Fire Switch (`RectumFireSwitch`)
 
 Category: `RectumFire/Utils`  
 Type: dynamic ANY selector
@@ -130,7 +147,7 @@ The main idea is simple: build one interchangeable collection of incoming `ANY` 
 - Typical pattern: aggregate multiple branch variants into the switch, control `select`, and keep one stable `out` connection further in the pipeline.
 - Keep one extra empty slot ready for quick extension.
 
-## 🔥Fire Banner (`RectumFireBanner`)
+## 5) Fire Banner (`RectumFireBanner`)
 
 Category: `RectumFire/Test`  
 Type: output preview bridge for widget promotion/subgraphs

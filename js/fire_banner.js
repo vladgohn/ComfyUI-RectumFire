@@ -189,7 +189,7 @@ function installPromotionListener(subgraphNode) {
 }
 
 app.registerExtension({
-  name: "rf.banner.widget_preview_from_python",
+  name: "RectumFireBannerPreview",
 
   async afterConfigureGraph() {
     walkGraph(app.graph, (n) => {

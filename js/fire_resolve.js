@@ -5,7 +5,7 @@ import { app } from "../../scripts/app.js";
 import { firetosterShow } from "./fire_toster.js";
 
 const RF = Object.freeze({
-  EXT_NAME: "RectumFire.FireResolve",
+  EXT_NAME: "RectumFireResolve",
   // IMPORTANT: do NOT use the old guard as an early-return gate.
   // Use a dedicated listener guard so updates can't "brick" the handler.
   LISTENER_GUARD: "__rf_fire_resolve_listener_attached__",
@@ -107,8 +107,13 @@ function findPathWidgets(node) {
   const used = new Set();
   const preferred = ["lora_name", "lora", "lora_1", "lora_2", "loras", "lora_model", "unet_name", "clip_name", "vae_name", "model_name", "ckpt_name", "checkpoint", "path", "file", "control_net_name"];
 
-  const add = (w) => {
+  const add = (w, force = false) => {
     if (!w || used.has(w)) return;
+    if (force) {
+      used.add(w);
+      out.push(w);
+      return;
+    }
     const isCombo = isComboWidget(w);
     const hasStringValue = typeof w.value === "string";
     const looksLikeModelString = hasStringValue && isLikelyModelText(String(w.value || ""));
@@ -118,7 +123,7 @@ function findPathWidgets(node) {
     out.push(w);
   };
 
-  for (const n of preferred) add(getWidgetByName(node, n));
+  for (const n of preferred) add(getWidgetByName(node, n), true);
 
   for (const w of node.widgets) {
     if (!w || used.has(w)) continue;
@@ -275,6 +280,12 @@ function resolvePathFromCombos(widget, desiredBase) {
   const desiredRawNorm = desiredRaw.toLowerCase();
   const desiredBn = norm(basename(desiredRaw));
 
+  const stripExt = (s) => {
+    const b = basename(s);
+    const i = b.lastIndexOf(".");
+    return i > 0 ? b.slice(0, i) : b;
+  };
+
   const prepared = onlyStrings.map((raw) => {
     const parsed = extractModelLikeName(raw) || raw;
     const rawNormPath = normPath(raw);
@@ -285,6 +296,8 @@ function resolvePathFromCombos(widget, desiredBase) {
       rawNormLower: rawNormPath.toLowerCase(),
       rawBaseNorm: norm(basename(rawNormPath)),
       parsedBaseNorm: norm(basename(parsedNormPath)),
+      rawBaseNoExtNorm: norm(stripExt(rawNormPath)),
+      parsedBaseNoExtNorm: norm(stripExt(parsedNormPath)),
     };
   });
 
@@ -301,27 +314,23 @@ function resolvePathFromCombos(widget, desiredBase) {
   const baseEq = prepared.find((c) => c.rawBaseNorm === desiredBn || c.parsedBaseNorm === desiredBn);
   if (baseEq) return baseEq.raw;
 
+  // 2) basename without extension exact (for checkpoint names that omit ".safetensors")
+  const desiredNoExtNorm = norm(stripExt(desiredRaw));
+  if (desiredNoExtNorm) {
+    const noExtEq = prepared.find(
+      (c) => c.rawBaseNoExtNorm === desiredNoExtNorm || c.parsedBaseNoExtNorm === desiredNoExtNorm
+    );
+    if (noExtEq) return noExtEq.raw;
+  }
+
   return null;
 }
 
 function setComboValue(widget, candidateRaw) {
   if (!widget) return false;
   if (!isComboWidget(widget)) return false;
-  const vals = widget.options?.values || [];
-
-  // Prefer exact option entry.
-  let idx = vals.findIndex((v) => typeof v === "string" && v === candidateRaw);
-  if (idx < 0) {
-    const candNorm = String(candidateRaw || "").trim().toLowerCase();
-    idx = vals.findIndex((v) => typeof v === "string" && String(v).trim().toLowerCase() === candNorm);
-  }
-
-  if (idx >= 0) {
-    widget.value = idx;
-    return true;
-  }
-
-  // Fallback for widgets expecting direct string.
+  // Keep it simple and stable: set string value only.
+  // Avoid index writes, they can break some custom COMBO widgets.
   widget.value = candidateRaw;
   return true;
 }

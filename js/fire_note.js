@@ -91,7 +91,7 @@ function install() {
 }
 
 app.registerExtension({
-  name: "rectumfire.note",
+  name: "RectumFireNote",
   setup() {
     install();
   },

@@ -4,25 +4,20 @@ const NODE_TYPE = "RectumFireDone";
 const NODE_WIDTH = 200; // width only
 
 const TITLE_DONE = "💯";
-
-function rememberDefaultTitle(node) {
-  if (node.__rf_default_title__ != null) return;
-  node.__rf_default_title__ = typeof node.title === "string" ? node.title : "";
-}
+const TITLE_IDLE = "🔥Fire🔊";
+const DONE_AUDIO_FILE = "./assets/done.wav";
 
 function setTitle(node, t) {
   node.title = t;
   node.setDirtyCanvas?.(true, true);
 }
 
-function restoreTitle(node) {
-  rememberDefaultTitle(node);
-  setTitle(node, node.__rf_default_title__);
+function setDoneTitle(node) {
+  setTitle(node, TITLE_DONE);
 }
 
-function setDoneTitle(node) {
-  rememberDefaultTitle(node);
-  setTitle(node, TITLE_DONE);
+function setIdleTitle(node) {
+  setTitle(node, TITLE_IDLE);
 }
 
 function setNodeWidthOnly(node, w) {
@@ -46,11 +41,34 @@ function forEachDoneNode(fn) {
 
 let prevRemaining = null;
 
+async function playDoneSound(node) {
+  const url = new URL(DONE_AUDIO_FILE, import.meta.url).toString();
+
+  try {
+    node.__rf_done_audio__?.pause?.();
+  } catch {}
+
+  try {
+    const audio = new Audio(url);
+    audio.volume = 0.3;
+    audio.currentTime = 0;
+    node.__rf_done_audio__ = audio;
+    await audio.play();
+    return true;
+  } catch {}
+
+  return false;
+}
+
 app.registerExtension({
-  name: "RectumFire.Done",
+  name: "RectumFireDone",
 
   setup() {
-    // Restore title when a new queue starts: remaining goes 0 -> >0
+    app.api.addEventListener("execution_start", () => {
+      forEachDoneNode((n) => setIdleTitle(n));
+    });
+
+    // Fallback restore when queue starts: remaining goes 0 -> >0
     app.api.addEventListener("status", (e) => {
       const remaining = e?.detail?.exec_info?.queue_remaining;
       if (typeof remaining !== "number") return;
@@ -61,7 +79,7 @@ app.registerExtension({
       }
 
       if (prevRemaining === 0 && remaining > 0) {
-        forEachDoneNode((n) => restoreTitle(n));
+        forEachDoneNode((n) => setIdleTitle(n));
       }
 
       prevRemaining = remaining;
@@ -75,7 +93,7 @@ app.registerExtension({
     nodeType.prototype.onNodeCreated = function () {
       prevCreated?.apply(this, arguments);
 
-      rememberDefaultTitle(this);
+      setIdleTitle(this);
 
       setTimeout(() => {
         setNodeWidthOnly(this, NODE_WIDTH);
@@ -84,21 +102,13 @@ app.registerExtension({
 
     const prevExec = nodeType.prototype.onExecuted;
     nodeType.prototype.onExecuted = async function () {
-      prevExec?.apply(this, arguments);
+      await prevExec?.apply(this, arguments);
 
       const enabled = this.widgets?.find((w) => w?.name === "enable")?.value ?? true;
       if (!enabled) return;
 
       setDoneTitle(this);
-
-      const url = new URL("./assets/done.mp3", import.meta.url).toString();
-
-      try {
-        const audio = new Audio(url);
-        audio.volume = 0.3;
-        this.__rf_done_audio__ = audio;
-        await audio.play();
-      } catch {}
+      await playDoneSound(this);
     };
   },
 });

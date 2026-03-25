@@ -186,7 +186,7 @@ LiteGraph.LGraphCanvas.prototype.drawNode = function (node, ctx) {
 };
 
 app.registerExtension({
-  name: "comfyui_rectumfire.fire_label",
+  name: "RectumFireLabel",
   registerCustomNodes() {
     LiteGraph.registerNodeType(FireLabel.type, FireLabel);
     FireLabel.category = "RectumFire > UX";

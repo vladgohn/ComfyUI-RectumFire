@@ -547,7 +547,7 @@ function patchNodeType(nodeType) {
 
 // ---------------- extension ----------------
 app.registerExtension({
-  name: "comfyui.rectumfire.fire_timer",
+  name: "RectumFireTimer",
 
   beforeRegisterNodeDef(nodeType, nodeData) {
     try {
