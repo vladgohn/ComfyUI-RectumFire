@@ -1,7 +1,7 @@
 [project]
 name = "rectumfire"
-version = "1.0.0"
-description = "Workflow repair, observability, and daily-use utilities for ComfyUI."
+version = "1.0.1"
+description = "Daily-use ComfyUI utilities for workflow repair, subgraph previews, clean switching, and better run feedback."
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
 classifiers = [
@@ -16,4 +16,5 @@ Documentation = "https://github.com/vladgohn/ComfyUI-RectumFire#readme"
 [tool.comfy]
 PublisherId = "vladgohn"
 DisplayName = "RectumFire"
+Icon = "https://raw.githubusercontent.com/vladgohn/ComfyUI-RectumFire/main/branding/icon.jpg"
 requires-comfyui = ">=1.0.0"
