@@ -1,0 +1,19 @@
+[project]
+name = "rectumfire"
+version = "1.0.0"
+description = "Workflow repair, observability, and daily-use utilities for ComfyUI."
+license = { file = "LICENSE" }
+requires-python = ">=3.10"
+classifiers = [
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Repository = "https://github.com/vladgohn/ComfyUI-RectumFire"
+Documentation = "https://github.com/vladgohn/ComfyUI-RectumFire#readme"
+"Bug Tracker" = "https://github.com/vladgohn/ComfyUI-RectumFire/issues"
+
+[tool.comfy]
+PublisherId = "vladgohn"
+DisplayName = "RectumFire"
+requires-comfyui = ">=1.0.0"
