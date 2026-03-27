@@ -1,48 +1,65 @@
-# ComfyUI-RectumFire Documentation
+# Node Guide
 
-## Overview
-ComfyUI-RectumFire is a powerful tool that provides a variety of functionalities via nodes. Below is the comprehensive documentation for all node functions included in the project.
+## 1) Exported Nodes Documentation
 
-## Exported Nodes
-#### 1. [Node Name]
-**Inputs:** [Describe types of inputs]
-**Outputs:** [Describe types of outputs]
-**Usage Pattern:** [Explanation of usage]
+- **Node 1: Description**
+  - **Inputs:** ...
+  - **Outputs:** ...
+  - **Behavior:** ...
 
-#### 2. [Node Name]
-**Inputs:** [Describe types of inputs]
-**Outputs:** [Describe types of outputs]
-**Usage Pattern:** [Explanation of usage]
+- **Node 2: Description**
+  - **Inputs:** ...
+  - **Outputs:** ...
+  - **Behavior:** ...
 
-... (Continue for all currently exported nodes)
+- **Node 3: Description**
+  - **Inputs:** ...
+  - **Outputs:** ...
+  - **Behavior:** ...
 
-## Non-Exported Nodes
-#### fire_mask
-**Inputs:**  
-- Parameter 1: [Description]  
-- Parameter 2: [Description]  
+- **Node 4: Description**
+  - **Inputs:** ...
+  - **Outputs:** ...
+  - **Behavior:** ...
 
-**Outputs:**  
-- Output 1: [Description]  
+- **Node 5: Description**
+  - **Inputs:** ...
+  - **Outputs:** ...
+  - **Behavior:** ...
 
-**Usage Pattern:**  
-[Detailed explanation on how to use fire_mask]
+## 6) Fire Mask (`RectumFireMask`)
+- **Inputs:** 
+    - ...
+- **Outputs:** 
+    - ...
+- **Behavior:** 
+    - ...
 
-#### fire_route
-**Inputs:**  
-- Parameter 1: [Description]  
-- Parameter 2: [Description]  
+## 7) Fire Route (`RectumFireRoute`)
+- **Inputs:** 
+    - ...
+- **Outputs:** 
+    - ...
+- **Behavior:** 
+    - ...
 
-**Outputs:**  
-- Output 1: [Description]  
+## Frontend Utilities
+...
 
-**Usage Pattern:**  
-[Detailed explanation on how to use fire_route]
+## Assets
+...
 
-## Frontend Tools
-The frontend tools section has been expanded to include an in-depth look at the user interface components and their functionalities.
+## Known Design Details
+...
 
-- **Tool 1:** Brief description
-- **Tool 2:** Brief description
+## Compatibility
+...
 
-... (Additional tools can be included here)
+## Troubleshooting
+...
+
+## Recommended Workflow Patterns
+...
+
+## License
+...
