@@ -1,300 +1,207 @@
 # ComfyUI RectumFire
 
-RectumFire is a UX-focused custom node pack for ComfyUI.
-It adds utility/output nodes and frontend enhancements that make long workflows easier to monitor, debug, and operate.
+**Languages:** **English** | [简体中文](README.zh-CN.md)
 
-### Why the name "RectumFire"
-The name is intentionally raw: it reflects the pain many of us hit in real ComfyUI work when basic workflow UX tools are missing.  
-RectumFire is an attempt to reduce that pain with practical, no-nonsense nodes and frontend helpers that make daily use faster and less frustrating.
+RectumFire is a small ComfyUI utility pack for solving everyday workflow pain.
 
-This repository is optimized for practical workflow quality-of-life:
-- visual run timer with animated compact UI
-- "done" output node with optional completion sound
-- lightweight text note node for inline documentation
-- dynamic ANY-type switch node (up to 32 inputs)
-- image banner preview node useful for promoted subgraph widgets
-- extra frontend hotkeys/utilities for copy/paste and path resolve helpers
+This is not a pack of niche one-off tricks.
+It is a pack of nodes for the problems that come back all the time:
+- broken imported workflows
+- missing model selections
+- ugly or cluttered routing
+- no runtime feedback
+- no good visual preview from subgraphs
 
-## What You Get
+That is why it is called `RectumFire`.
 
-### Exported Python Nodes (loaded by `__init__.py`)
+## What Is In This Pack
 
-These are the nodes currently registered in ComfyUI from this repo:
-
-1. `RectumFireTimer` (`🔥Fire Timer`)
-2. `RectumFireDone` (`🔥Fire🔊`)
-3. `RectumFireNote` (`🔥Fire Note`)
-4. `RectumFireSwitch` (`🔥Fire Switch`)
-5. `RectumFireBanner` (`🔥Fire Banner`)
+- `Fire Resolve`
+- `Fire Copy`
+- `Fire Note`
+- `Fire Banner`
+- `Fire Switch`
+- `Fire Timer`
+- `Fire Done`
+- `Fire Label`
 
 ## Installation
 
-1. Clone or copy this repository into your ComfyUI custom nodes folder:
-   - `ComfyUI/custom_nodes/comfyui_rectumfire`
-2. Restart ComfyUI.
-3. Confirm nodes appear in the Add Node menu under categories starting with `RectumFire/...`.
+Put this repository into `ComfyUI/custom_nodes/`.
 
-No Python dependency installation is required beyond normal ComfyUI environment requirements.
+If you use git:
 
-## Node Guide
+```bash
+cd ComfyUI/custom_nodes
+git clone https://github.com/vladgohn/ComfyUI-RectumFire.git
+```
 
-## 1) Fire Timer (`RectumFireTimer`)
+Then restart ComfyUI.
 
-Category: `RectumFire/UI`  
-Type: output/UI execution indicator
+## The Core Of RectumFire
 
-![Fire Timer](screens/fire_timer.png)
+RectumFire started from one problem:
+you open someone else's workflow, and it breaks because models are missing, renamed, or stored under different paths.
 
-### Why this node exists
-Use it as a compact real-time run clock for queue execution. It gives immediate visual feedback that the graph is running and shows live runtime (`MM:SS:CS`).
+Without tooling, fixing that is slow and irritating.
+RectumFire turns it into a simple loop:
 
-### Behavior and features
-- Starts on `execution_start` event.
-- Stops/freeze on:
-  - execution end (`executing` with `detail === null`)
-  - execution error
-  - interruption
-- Keeps final elapsed value visible when run ends.
-- Resets only on the next run start (not on stop).
-- Draws custom canvas UI with:
-  - blinking colons
-  - theme transition between running/stopped states
-  - animated title glyph while running
-  - animated moving eyes overlay (`js/assets/Eyes.png`, `js/assets/Pupil.png`)
+1. try to auto-fix
+2. extract what is missing
+3. keep the repair info inside the graph
 
-### Usage notes
-- Place anywhere as a dashboard/status element.
-- It is an output node (`OUTPUT_NODE = True`), so it can serve as an execution endpoint.
-- Multiple timer nodes are synchronized by shared frontend timer state.
+## Fire Resolve
 
-## 2) Fire Done (`RectumFireDone`)
+Hotkey: `Shift + Alt + R`
 
-Category: `RectumFire/UX`  
-Type: output completion notifier
+`Fire Resolve` is the fastest way to repair broken imported workflows.
 
-### Why this node exists
-Use this as an explicit "completion bell" endpoint in important branches (e.g., final image save branch), so you know when that branch really executed.
+Select a node, press the hotkey, and if the needed model exists in your available options, the node tries to relink it automatically.
 
-### Inputs
-- `any` (ANY): execution trigger input.
-- `enable` (BOOLEAN): turn notification on/off.
+The value is simple:
+- less manual searching
+- less typing
+- less stupid repair work
 
-### Behavior and features
-- Has no outputs by design.
-- Emits UI signal `rf_done` when executed and enabled.
-- Frontend reacts by:
-  - changing node title to `💯`
-  - playing `js/assets/done.mp3` (volume 0.3)
-- Title is restored automatically when a new queue starts.
+## Fire Copy
 
-### Usage notes
-- Connect it only where "done" should mean done.
-- If `enable = false`, node is effectively silent/no-op.
-- Browser audio policies may require prior user interaction with page for autoplay.
+Hotkey: `Shift + Alt + C`
 
-## 3) Fire Note (`RectumFireNote`)
+If `Fire Resolve` cannot repair the node automatically, `Fire Copy` pulls out the useful references for you.
 
-Category: `Fire`  
-Type: utility note node
+Usually that means model filenames.
+If not, it falls back to a compact JSON snapshot of the node.
 
-### Why this node exists
-Use it as an in-graph text scratchpad for prompts, TODOs, model notes, reproducibility metadata, or experiment logs.
+This matters because even when auto-fix fails, you still get the exact data you need without digging through workflow files by hand.
 
-### Behavior and features
-- Simple multiline string widget.
-- No outputs and no compute cost impact.
-- Supports keyboard-driven creation/paste via frontend helpers.
+## Fire Note
 
-### Usage notes
-- Ideal for keeping context inside workflow JSON.
-- Works well with RectumFire copy/paste hotkeys (see Hotkeys section).
+Hotkey for paste: `Shift + Alt + V`
 
-## 4) Fire Switch (`RectumFireSwitch`)
+`Fire Note` is where the repair context lives.
 
-Category: `RectumFire/Utils`  
-Type: dynamic ANY selector
+After copy, paste creates a note near the cursor and inserts the collected info directly into the workflow.
+Found models are marked with `✅`, missing ones with `❌`.
 
-![Fire Switch](screens/fire_switch.png)
+That makes the next step much faster:
+- you instantly see what exists locally
+- you instantly see what is missing
+- you can copy missing filenames into model archive search without guessing
 
-### Why this node exists
-Use it to collect a set of equivalent `ANY` inputs and switch between them without rewiring downstream nodes.
+These three are meant to be used together.
+They are the foundation of the whole pack.
 
-The main idea is simple: build one interchangeable collection of incoming `ANY` streams, select the active one, and keep a single `ANY` output flow for the rest of the graph.
-
-### Inputs/Outputs
-- Required input:
-  - `select` (INT, 1..32)
-- Optional inputs:
-  - `input1`..`input32` (ANY)
-- Outputs:
-  - `out` (ANY): selected input value
-  - `selected_index` (INT): normalized chosen index
-
-### Behavior and features
-- Backend clamps `select` to `[1, 32]`.
-- Frontend extension auto-manages visible input slots:
-  - keeps contiguous `input1..inputN`
-  - target slot count is `connected + 1` (min 2, max 32)
-  - updates select widget max to connected range
-- Missing selected input returns `None` (Python `None` propagated).
-
-> **Killer feature: Ghost-port cleanup**
-> Defensive slot normalization prevents stale/ghost input ports after disconnects.
-> It removes only trailing unused slots, disconnects before removal, validates links against `graph.links`, and re-normalizes on add/configure/connection-change/serialize events.
-
-### Usage notes
-- Best used when all candidate inputs are interchangeable alternatives for the same downstream path.
-- Typical pattern: aggregate multiple branch variants into the switch, control `select`, and keep one stable `out` connection further in the pipeline.
-- Keep one extra empty slot ready for quick extension.
-
-## 5) Fire Banner (`RectumFireBanner`)
-
-Category: `RectumFire/Test`  
-Type: output preview bridge for widget promotion/subgraphs
+## Fire Banner
 
 ![Fire Banner](screens/fire_banner.png)
 
-### Why this node exists
-Use it when you want an image preview represented through a string widget (`rf_banner`) and visible when that widget is promoted to parent subgraphs.
+`Fire Banner` is the killer feature of this pack.
 
-This is primarily a **planned/prototype direction** for ComfyUI subgraph UX:
-- expose an inner image preview outside the subgraph boundary
-- make the parent subgraph node visually informative without opening it
-- reduce blind debugging when a nested branch is selected or switched
+ComfyUI subgraphs still have a major usability problem: getting visual information out of them in a practical way.
+`Fire Banner` solves that by surfacing preview information outward, which makes subgraphs much easier to monitor and debug.
 
-### Inputs
-- `rf_banner` (STRING): anchor widget (mainly for promotion target).
-- `image` (IMAGE): image source used to generate preview.
+This is not just decoration.
+If you use modular or nested workflows, this is genuinely useful every day.
 
-### Behavior and features
-- Saves incoming image as temporary PNG in ComfyUI temp directory.
-- Returns UI payload (`rf_banner_preview`) with temp file metadata.
-- Frontend patches `rf_banner` widget into image renderer.
-- Supports propagation to parent subgraph nodes by listening to `widget-promoted` event.
+## Fire Switch
 
-### Usage notes
-- This node is primarily UX glue for subgraph/widget workflows.
-- It is output-only and returns no backend tensor outputs.
+![Fire Switch](screens/fire_switch.png)
 
-### Why this is useful (community context)
-Subgraph workflows are becoming more common, but observability is still a pain point. Fire Banner targets that gap:
+`Fire Switch` is an `ANY` switch for interchangeable branches.
 
-- Official ComfyUI extension docs explicitly call out `Widget Promotion` events (`widget-promoted` / `widget-demoted`) and note the behavior is still evolving.
-- The same docs emphasize separate node identifiers for UI state (including images), which shows preview state in nested graphs is a first-class but non-trivial concern.
-- Multiple ComfyUI issues around subgraphs/group nodes report fragility and hard-to-debug behavior; showing preview on the parent node helps identify where a nested branch fails without drilling into each level.
+Nodes like this already exist, but this version fixes one annoying issue: ghost inputs that stay behind after disconnecting or reworking links.
 
-In short: exposing subgraph previews externally is not just cosmetic; it improves debugging speed and operator confidence in large modular workflows.
+The point of this node is not novelty.
+The point is cleaner behavior and less graph trash.
 
-References:
-- ComfyUI docs, JavaScript objects/hijacking (`widget-promoted`, UI state object notes): https://docs.comfy.org/custom-nodes/js/javascript_objects_and_hijacking
-- ComfyUI docs, core node concepts (`subgraphs`): https://docs.comfy.org/development/core-concepts/nodes
-- ComfyUI issue #10522 (subgraph execution/maintenance pain in larger nested workflows): https://github.com/comfyanonymous/ComfyUI/issues/10522
-- ComfyUI issue #7506 (preview visibility complaints during workflow execution): https://github.com/comfyanonymous/ComfyUI/issues/7506
+Known limitation for now:
+this node currently switches by selected index.
+It does not yet mirror the behavior of `Switch (Any)` where muting one source lets the next available source take over automatically.
 
-## Frontend Utilities and Hotkeys
+That behavior is known, planned, and not implemented yet.
 
-Beyond node rendering logic, this repo ships a unified recovery workflow for missing/broken model references.
+## Quality-Of-Life Utilities
 
-### Fire Recovery System: `Copy + Resolve + Note`
+## Fire Timer
 
-This block is designed as one operational toolchain, not separate helpers:
-- collect model-related references from nodes
-- resolve broken/ambiguous path values against available combo options
-- keep recovery notes directly in-graph for fast iteration and handoff
+![Fire Timer](screens/fire_timer.png)
 
-1. `Shift + Alt + C` (`fire_copy.js`) - Collect
-   - Reads selected node and extracts model-like filenames when possible.
-   - Falls back to copying a compact node JSON snapshot when no model strings are found.
+`Fire Timer` is a runtime clock you actually want to keep on the canvas.
 
-> **Killer feature: JSON fallback copy**
-> In many ComfyUI situations you cannot quickly inspect the exact node JSON fragment you need.
-> `Fire Copy` solves this by falling back to a compact JSON snapshot, so you can instantly inspect/share/debug node state without digging through full workflow files.
+It gives immediate visual feedback that a workflow is running, keeps the final elapsed time visible when execution ends, and does it with a UI that is intentionally more stylish than a plain debug widget.
 
-2. `Shift + Alt + R` (`fire_resolve.js`) - Resolve
-   - Attempts to remap current widget values to valid entries from combo lists.
-   - Uses basename/stem matching heuristics to recover from path drift.
-   - Marks node status and shows toast summary: fixed / already OK / failed / skipped.
+This is one of those nodes that becomes hard to live without once you start using it.
 
-3. `Shift + Alt + V` (`fire_copy.js` / `fire_note.js`) - Document
-   - Pastes last collected payload into a new `RectumFireNote` near cursor.
-   - Keeps repair context inside the workflow itself.
+## Fire Done
 
-### Why this matters
-- Missing model paths are one of the most common workflow breakpoints.
-- This system reduces repair friction by combining search, auto-fix attempts, and inline documentation into one keyboard-driven loop.
-- Result: faster recovery and better usability in large or shared workflows.
+![Fire Done](screens/fire_done.png)
 
-### Additional frontend tools
+`Fire Done` is a simple completion bell.
 
-1. Fire Label (`fire_label.js`) - frontend-only visual title node
-   - Virtual node registered only in frontend via `LiteGraph.registerNodeType` (no Python backend node).
-   - Converts text into Unicode Mathematical Bold Fraktur, so you can place gothic-style headers directly inside the graph.
-   - Supports styling controls: `fontSize`, `fontColor`, `textAlign`, `backgroundColor`, `borderRadius`, `letterSpacing`, `padding`.
-   - Auto-fits node size to rendered text and supports multiline headings.
-   - Best used as section/title markers for large workflows and subgraph dashboards.
+It exists because "queue finished" is not always the same thing as "the branch I care about actually finished."
+Put it at the exact point that matters, and it gives you a visible and audible signal.
 
-2. Fire Toster (`fire_toster.js`) - internal message API
-   - Reusable DOM toast engine used internally by RectumFire tools.
-   - Public helper: `firetosterShow({ theme, title, sub, lifeMs })`.
-   - Themes: `green`, `violet`, `magenta`.
-   - Non-blocking overlay behavior (`pointer-events: none` on container/cards) with manual close button support.
-   - Used by `fire_copy.js` and `fire_resolve.js` to display recovery status and action results.
+If you already know `PlaySound` from `Custom Scripts`, this node fills a similar role.
+The difference is that `Fire Done` is intentionally simpler, lighter, and comes with a different default sound.
 
-## Assets
+This version is intentionally simpler than some alternatives.
+No bloated sound-picker UI, no extra overdesign.
+If you want another sound, replace `js/assets/done.wav`.
 
-The following assets are used by frontend UX features:
-- `js/assets/done.mp3`, `done.wav`: completion sound
-- `js/assets/Eyes.png`, `Pupil.png`: timer overlay animation
-- `js/assets/anim.gif`, `dummy.png`, `assets.zip`: utility/experimental assets
+## Fire Label
 
-## Known Design Details
+![Fire Label](screens/fire_label.png)
 
-- `RectumFireDone` and `RectumFireTimer` are `OUTPUT_NODE = True` by design.
-- `RectumFireBanner` uses `INPUT_IS_LIST = True` and handles batched tensor/image input safely.
-- Timer UI logic is entirely frontend-driven; backend node only provides execution anchor.
-- Some JS files are experimental or legacy (`fire_test.js`, `fire_sketch.js`) and are not core to production behavior.
+`Fire Label` makes gothic-style headings directly in the graph.
 
-## Non-exported Python Files in This Repo
+It is not about raw functionality.
+It is about making big workflows easier and nicer to read.
+It looks good, it is lightweight, and it does not depend on installing a custom font.
 
-The repository also contains Python modules not currently exported in `__init__.py`:
-- `fire_mask.py` (`RectumFireMask`)
-- `fire_route.py` (`RectumFireRoute`)
+## Notes
 
-They are present in source but not active unless you explicitly register/import them in `__init__.py`.
-
-## Compatibility
-
-- Intended for ComfyUI frontend extension API (`app.registerExtension`, `api` event listeners).
-- Works best on modern Chromium-based browsers where audio and clipboard APIs are available.
+- The backend nodes exported by the pack are `Fire Timer`, `Fire Done`, `Fire Note`, `Fire Switch`, and `Fire Banner`.
+- `Fire Label`, `Fire Copy`, and `Fire Resolve` are frontend tools/extensions.
+- `fire_route.py` exists in the repository but is not currently exported as an active node.
 
 ## Troubleshooting
 
-1. Nodes do not appear
-   - Verify folder name/location under `ComfyUI/custom_nodes/`.
-   - Restart ComfyUI fully.
-   - Check ComfyUI console for import errors.
+### Nodes do not appear
 
-2. No completion sound
-   - Ensure `RectumFireDone` `enable` is true.
-   - Ensure node executed in active branch.
-   - Interact with browser tab first (autoplay policies).
+- make sure the repository is inside `ComfyUI/custom_nodes/`
+- restart ComfyUI fully
+- check ComfyUI console for import errors
 
-3. Hotkeys do nothing
-   - Ensure canvas has focus and you are not typing in input fields.
-   - Confirm conflicting extensions are not intercepting the same shortcuts.
+### Fire Done does not play sound
 
-4. Banner preview missing
-   - Verify `image` input is connected and produces valid image.
-   - Confirm temp files are writable in ComfyUI temp directory.
+- make sure the node actually executed
+- make sure `enable` is on
+- interact with the browser tab first if autoplay is blocked
 
-## Recommended Workflow Patterns
+### Fire Resolve does nothing
 
-1. Put `Fire Timer` near workflow header for constant visibility.
-2. Place `Fire Done` at the final branch that represents "job complete".
-3. Use `Fire Switch` for branch/model toggling during experiments.
-4. Use `Fire Note` for reproducibility logs inside workflow JSON.
-5. Use `Fire Banner` when building subgraphs with promoted UI widgets and visual status.
+- select the node first
+- use `Shift + Alt + R`
+- it can only auto-fix models that already exist in your available options
+
+### Fire Banner does not show preview
+
+- make sure an image is connected
+- make sure the branch actually executed
+- make sure ComfyUI temp output is writable
 
 ## License
 
-Add your license section here before GitHub publication.
+This repository is licensed under [Apache-2.0](LICENSE).
+Attribution is preserved through the license and the included [NOTICE](NOTICE) file.
+
+## Support
+
+If RectumFire saves you time, you can support the project through GitHub Sponsors:
+
+- [Sponsor on GitHub](https://github.com/sponsors/vladgohn)
+
+If you need paid help, the best fit is:
+- ComfyUI workflow repair
+- workflow cleanup and graph UX improvement
+- subgraph observability / utility-node integration
