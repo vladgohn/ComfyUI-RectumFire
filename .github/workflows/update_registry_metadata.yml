@@ -35,6 +35,15 @@ jobs:
               "banner_url": comfy.get("Banner", ""),
               "repository": project.get("urls", {}).get("Repository", ""),
               "license": "LICENSE",
+              "preempted_comfy_node_names": [
+                  "RectumFireTimer",
+                  "RectumFireDone",
+                  "RectumFireNote",
+                  "RectumFireSwitch",
+                  "RectumFireBanner",
+                  "🔥Fire Label",
+                  "Fire Label"
+              ],
               "supported_os": ["OS Independent"],
               "supported_accelerators": [],
               "supported_comfyui_version": comfy.get("requires-comfyui", ""),
