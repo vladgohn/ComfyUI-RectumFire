@@ -68,20 +68,29 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
-          import json, tomllib
+          import json, re
           from pathlib import Path
 
-          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
-          project = data.get("project", {})
-          comfy = data.get("tool", {}).get("comfy", {})
+          text = Path("pyproject.toml").read_text(encoding="utf-8")
+
+          def extract(pattern, default=""):
+              m = re.search(pattern, text, re.M)
+              return m.group(1).strip() if m else default
+
+          project_name = extract(r'^name\s*=\s*"([^"]+)"')
+          description = extract(r'^description\s*=\s*"([^"]+)"')
+          repository = extract(r'^Repository\s*=\s*"([^"]+)"')
+          display_name = extract(r'^DisplayName\s*=\s*"([^"]+)"')
+          icon = extract(r'^Icon\s*=\s*"([^"]+)"')
+          requires_comfyui = extract(r'^requires-comfyui\s*=\s*"([^"]+)"')
 
           payload = {
-              "id": project["name"],
-              "name": comfy.get("DisplayName") or project["name"],
-              "description": project.get("description", ""),
-              "icon": comfy.get("Icon", ""),
-              "banner_url": comfy.get("Banner", ""),
-              "repository": project.get("urls", {}).get("Repository", ""),
+              "id": project_name,
+              "name": display_name or project_name,
+              "description": description,
+              "icon": icon,
+              "banner_url": "",
+              "repository": repository,
               "license": "LICENSE",
               "preempted_comfy_node_names": [
                   "RectumFireTimer",
@@ -94,7 +103,7 @@ jobs:
               ],
               "supported_os": ["OS Independent"],
               "supported_accelerators": [],
-              "supported_comfyui_version": comfy.get("requires-comfyui", ""),
+              "supported_comfyui_version": requires_comfyui,
               "supported_comfyui_frontend_version": ""
           }
 
