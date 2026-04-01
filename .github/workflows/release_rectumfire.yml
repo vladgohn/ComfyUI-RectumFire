@@ -1,20 +1,60 @@
-name: Update Comfy registry metadata
+name: Release RectumFire
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "pyproject.toml"
-      - "branding/**"
+
+permissions:
+  contents: write
 
 jobs:
-  update-metadata:
+  release:
     runs-on: ubuntu-latest
     steps:
       - name: Check out code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Bump patch version
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          path = Path("pyproject.toml")
+          text = path.read_text(encoding="utf-8")
+          m = re.search(r'^version\s*=\s*"(\d+)\.(\d+)\.(\d+)"', text, re.M)
+          if not m:
+            raise SystemExit("version not found in pyproject.toml")
+
+          major, minor, patch = map(int, m.groups())
+          next_version = f'{major}.{minor}.{patch + 1}'
+          text = re.sub(r'^version\s*=\s*"\d+\.\d+\.\d+"', f'version = "{next_version}"', text, count=1, flags=re.M)
+          path.write_text(text, encoding="utf-8")
+          print(next_version)
+          Path(".release_version").write_text(next_version, encoding="utf-8")
+          PY
+
+      - name: Commit version bump
+        shell: bash
+        run: |
+          VERSION="$(cat .release_version)"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pyproject.toml
+          git commit -m "Release ${VERSION}"
+          git push origin HEAD:main
+
+      - name: Publish custom node
+        uses: Comfy-Org/publish-node-action@main
+        with:
+          personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
 
       - name: Build metadata payload
         shell: bash
@@ -56,7 +96,7 @@ jobs:
           )
           PY
 
-      - name: Update node metadata
+      - name: Update registry metadata
         shell: bash
         env:
           REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
