@@ -115,6 +115,13 @@ function drawEyes(ctx, node, w, h, nowMs) {
 const STYLE = {
   running: { bg: "#EDEDED", text: "#1E1E20" },
   stopped: { bg: "#282829", text: "#EDEDED" },
+  drawer: {
+    bg: "#1F232B",
+    line: "rgba(255,255,255,0.08)",
+    gpu: "#FF6506",
+    date: "#E3B6FF",
+    value: "#F1F3F5",
+  },
 
   fontFamily:
     `"Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace`,
@@ -125,6 +132,8 @@ const STYLE = {
 
   defaultW: 140,
   defaultH: 50,
+  expandedH: 138,
+  displayH: 50,
 
   tickMs: 60,
 
@@ -215,6 +224,136 @@ function blinkAlpha(nowMs) {
   const t = (nowMs / 1000) * STYLE.blinkHz;
   const s = (Math.sin(t * Math.PI * 2) + 1) * 0.5; // 0..1
   return STYLE.blinkMinAlpha + (1 - STYLE.blinkMinAlpha) * s;
+}
+
+function setNodeSizeForMode(node) {
+  if (!node) return;
+  const w = STYLE.defaultW;
+  const h = node._rf_expanded ? STYLE.expandedH : STYLE.defaultH;
+  node.size = [w, h];
+  node.setSize?.(node.size);
+}
+
+function formatStampDate(date = new Date()) {
+  const day = String(date.getDate()).padStart(2, "0");
+  const months = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"];
+  const month = months[date.getMonth()] || "JAN";
+  const year = String(date.getFullYear()).slice(-2);
+  return `${day}/${month}/${year}`;
+}
+
+function cleanGpuName(raw) {
+  let s = String(raw || "").trim();
+  if (!s) return "GPU UNKNOWN";
+
+  s = s.replace(/^cuda:\d+\s*/i, "");
+  s = s.replace(/^gpu:\d+\s*/i, "");
+  s = s.replace(/\bNVIDIA\s+/i, "");
+  s = s.replace(/\bGeForce\s+/i, "");
+  s = s.replace(/\s+GPU\b/i, "");
+  s = s.replace(/\s+/g, " ").trim();
+
+  const rtx = s.match(/\bRTX\s+\d{3,4}(?:\s+Ti)?(?:\s+SUPER)?(?:\s+Laptop)?\b/i);
+  if (rtx) return rtx[0].replace(/\bRTX\s+(\d{3,4})\b/i, "RTX$1").replace(/\s+/g, " ").trim();
+
+  const gtx = s.match(/\bGTX\s+\d{3,4}(?:\s+Ti)?(?:\s+SUPER)?(?:\s+Laptop)?\b/i);
+  if (gtx) return gtx[0].replace(/\bGTX\s+(\d{3,4})\b/i, "GTX$1").replace(/\s+/g, " ").trim();
+
+  return s;
+}
+
+function normalizeVram(raw) {
+  if (typeof raw !== "number" || !isFinite(raw) || raw <= 0) return "";
+
+  let gb = 0;
+  if (raw > 1024 * 1024 * 1024) gb = raw / (1024 * 1024 * 1024);
+  else if (raw > 1024 * 1024) gb = raw / (1024 * 1024);
+  else if (raw > 1024) gb = raw / 1024;
+  else gb = raw;
+
+  const rounded = Math.max(1, Math.round(gb));
+  return `${rounded}G`;
+}
+
+async function getHardwareStamp() {
+  if (window.__rf_timer_hw__) return window.__rf_timer_hw__;
+
+  const fallback = { gpu: "GPU UNKNOWN", vram: "" };
+
+  try {
+    const resp = api.fetchApi
+      ? await api.fetchApi("/system_stats")
+      : await fetch("/system_stats");
+    if (!resp?.ok) {
+      window.__rf_timer_hw__ = fallback;
+      return fallback;
+    }
+
+    const data = await resp.json();
+    const devices = Array.isArray(data?.devices) ? data.devices : Array.isArray(data?.system?.devices) ? data.system.devices : [];
+    const preferred = devices.find((d) => String(d?.type || d?.name || "").toLowerCase().includes("cuda")) || devices[0];
+
+    if (!preferred) {
+      window.__rf_timer_hw__ = fallback;
+      return fallback;
+    }
+
+    const gpuRaw =
+      preferred.device_name ??
+      preferred.gpu_name ??
+      preferred.name ??
+      preferred.type ??
+      "GPU UNKNOWN";
+
+    const gpu = cleanGpuName(gpuRaw);
+    const rawVram =
+      preferred.vram_total ??
+      preferred.vram_total_bytes ??
+      preferred.total_vram ??
+      preferred.total_memory ??
+      preferred.vram_total_mb ??
+      preferred.memory_total ??
+      null;
+    const vram = normalizeVram(rawVram);
+
+    window.__rf_timer_hw__ = { gpu, vram };
+    return window.__rf_timer_hw__;
+  } catch (_) {
+    window.__rf_timer_hw__ = fallback;
+    return fallback;
+  }
+}
+
+function getGpuLine(node) {
+  const gpu = String(node?._rf_hw_gpu || "GPU UNKNOWN").trim();
+  const vram = String(node?._rf_hw_vram || "").trim();
+  return vram ? `${gpu} ${vram}` : gpu;
+}
+
+function fitSingleLine(ctx, text, maxW, fontPx, weight = 600) {
+  let size = fontPx;
+  while (size > 8) {
+    ctx.font = `${weight} ${size}px ${STYLE.fontFamily}`;
+    if ((ctx.measureText(text).width || 0) <= maxW) return size;
+    size -= 1;
+  }
+  return 8;
+}
+
+function pushRunHistory(node, elapsedStr) {
+  if (!node) return;
+  const nextEntry = {
+    date: formatStampDate(new Date()),
+    value: elapsedStr,
+  };
+
+  const prev = Array.isArray(node._rf_run_history) ? node._rf_run_history : [];
+  const sameTop = prev[0] && prev[0].date === nextEntry.date && prev[0].value === nextEntry.value;
+  if (sameTop) return;
+
+  node._rf_run_history = [nextEntry, ...prev].slice(0, 3);
+  node.properties = node.properties || {};
+  node.properties.rf_run_history = node._rf_run_history;
 }
 
 function setNodeRunning(node, running) {
@@ -351,6 +490,7 @@ const Timer = {
       n._rf_timerStr = str;
       setNodeRunning(n, false);
       setTitleIdle(n);
+      pushRunHistory(n, str);
     }
 
     try {
@@ -435,8 +575,12 @@ function patchNodeType(nodeType) {
     try {
       // Set compact default for newly added nodes.
       // Saved workflow sizes are applied later by Comfy/LiteGraph configure path.
-      this.size = [STYLE.defaultW, STYLE.defaultH];
-      this.setSize?.(this.size);
+      this.properties = this.properties || {};
+      this._rf_expanded = !!(this.properties.rf_expanded ?? false);
+      this._rf_run_history = Array.isArray(this.properties.rf_run_history) ? this.properties.rf_run_history.slice(0, 3) : [];
+      this._rf_hw_gpu = String(this.properties.rf_hw_gpu || "");
+      this._rf_hw_vram = String(this.properties.rf_hw_vram || "");
+      setNodeSizeForMode(this);
 
       // Default string: show last known elapsed (or zeros)
       this._rf_timerStr = this._rf_timerStr || Timer.format(Timer.elapsedMs || 0);
@@ -455,9 +599,44 @@ function patchNodeType(nodeType) {
         this.title_color = "transparent";
         this.titleTextColor = "transparent";
       } catch (_) { }
+
+      getHardwareStamp().then((info) => {
+        this._rf_hw_gpu = info?.gpu || "GPU UNKNOWN";
+        this._rf_hw_vram = info?.vram || "";
+        this.properties.rf_hw_gpu = this._rf_hw_gpu;
+        this.properties.rf_hw_vram = this._rf_hw_vram;
+        this.setDirtyCanvas?.(true, true);
+      }).catch(() => {});
     } catch (_) { }
 
     return origOnNodeCreated?.apply(this, arguments);
+  };
+
+  const origOnConfigure = nodeType.prototype.onConfigure;
+  nodeType.prototype.onConfigure = function () {
+    const r = origOnConfigure?.apply(this, arguments);
+    try {
+      this.properties = this.properties || {};
+      this._rf_expanded = !!(this.properties.rf_expanded ?? this._rf_expanded ?? false);
+      this._rf_run_history = Array.isArray(this.properties.rf_run_history) ? this.properties.rf_run_history.slice(0, 3) : (this._rf_run_history || []);
+      this._rf_hw_gpu = String(this.properties.rf_hw_gpu || this._rf_hw_gpu || "");
+      this._rf_hw_vram = String(this.properties.rf_hw_vram || this._rf_hw_vram || "");
+      setNodeSizeForMode(this);
+    } catch (_) {}
+    return r;
+  };
+
+  const origOnSerialize = nodeType.prototype.onSerialize;
+  nodeType.prototype.onSerialize = function (o) {
+    const r = origOnSerialize?.apply(this, arguments);
+    try {
+      o.properties = o.properties || {};
+      o.properties.rf_expanded = !!this._rf_expanded;
+      o.properties.rf_run_history = Array.isArray(this._rf_run_history) ? this._rf_run_history.slice(0, 3) : [];
+      o.properties.rf_hw_gpu = String(this._rf_hw_gpu || "");
+      o.properties.rf_hw_vram = String(this._rf_hw_vram || "");
+    } catch (_) {}
+    return r;
   };
 
   const origOnRemoved = nodeType.prototype.onRemoved;
@@ -466,6 +645,23 @@ function patchNodeType(nodeType) {
       Timer.unregister(this);
     } catch (_) { }
     return origOnRemoved?.apply(this, arguments);
+  };
+
+  const origOnMouseDown = nodeType.prototype.onMouseDown;
+  nodeType.prototype.onMouseDown = function (e, pos, graphCanvas) {
+    try {
+      const localY = Array.isArray(pos) ? pos[1] : null;
+      if (typeof localY === "number" && localY >= 0 && localY <= STYLE.displayH) {
+        this._rf_expanded = !this._rf_expanded;
+        this.properties = this.properties || {};
+        this.properties.rf_expanded = this._rf_expanded;
+        setNodeSizeForMode(this);
+        this.setDirtyCanvas?.(true, true);
+        graphCanvas?.setDirty?.(true, true);
+        return true;
+      }
+    } catch (_) {}
+    return origOnMouseDown?.apply(this, arguments);
   };
 
   const origOnDrawForeground = nodeType.prototype.onDrawForeground;
@@ -482,10 +678,27 @@ function patchNodeType(nodeType) {
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
 
+    const displayH = STYLE.displayH;
+
     // Background
-    ctx.fillStyle = theme.bgCss;
-    roundRectPath(ctx, 0, 0, w, h, STYLE.radius);
-    ctx.fill();
+    if (this._rf_expanded) {
+      ctx.fillStyle = STYLE.drawer.bg;
+      roundRectPath(ctx, 0, 0, w, h, STYLE.radius);
+      ctx.fill();
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(0, 0, w, displayH);
+      ctx.clip();
+      ctx.fillStyle = theme.bgCss;
+      roundRectPath(ctx, 0, 0, w, displayH + STYLE.radius, STYLE.radius);
+      ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.fillStyle = theme.bgCss;
+      roundRectPath(ctx, 0, 0, w, h, STYLE.radius);
+      ctx.fill();
+    }
 
     // Text blocks: MM | : | SS | : | MS
     const pad = STYLE.padding;
@@ -499,7 +712,7 @@ function patchNodeType(nodeType) {
     const ms = tail.startsWith(":") ? tail.slice(1) : tail;
 
     const maxW = Math.max(1, w - pad * 2);
-    const maxH = Math.max(1, h - pad * 2);
+    const maxH = Math.max(1, displayH - pad * 2);
     const fontSize = fitFontSize(ctx, raw, maxW, maxH);
 
     ctx.textAlign = "left";
@@ -528,7 +741,7 @@ function patchNodeType(nodeType) {
     }
 
     let x = w * 0.5 - total * 0.5;
-    const y = h * 0.5;
+    const y = displayH * 0.5;
 
     for (const b of blocks) {
       x += b.gapBefore || 0;
@@ -539,6 +752,47 @@ function patchNodeType(nodeType) {
     ctx.globalAlpha = 1;
     // Eyes overlay (can draw outside node via negative Y)
     drawEyes(ctx, this, w, h, performance.now());
+
+    if (this._rf_expanded) {
+      const panelY = displayH;
+
+      ctx.strokeStyle = STYLE.drawer.line;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(8, panelY + 0.5);
+      ctx.lineTo(w - 8, panelY + 0.5);
+      ctx.stroke();
+
+      const gpuText = getGpuLine(this);
+      const gpuFont = fitSingleLine(ctx, gpuText, w - 20, 9, 700);
+      ctx.font = `700 ${gpuFont}px ${STYLE.fontFamily}`;
+      ctx.textAlign = "right";
+      ctx.textBaseline = "top";
+      ctx.fillStyle = STYLE.drawer.gpu;
+      ctx.fillText(gpuText, w - 10, panelY + 10);
+
+      const history = Array.isArray(this._rf_run_history) ? this._rf_run_history : [];
+      const rowStart = panelY + 36;
+      const rowStep = 17;
+
+      for (let i = 0; i < 3; i++) {
+        const item = history[i];
+        const rowY = rowStart + i * rowStep;
+        const dateText = item?.date || "-- --- --";
+        const valueText = item?.value || "--:--:--";
+
+        ctx.font = `500 8px ${STYLE.fontFamily}`;
+        ctx.textAlign = "left";
+        ctx.fillStyle = STYLE.drawer.date;
+        ctx.fillText(dateText, 10, rowY);
+
+        ctx.font = `500 8px ${STYLE.fontFamily}`;
+        ctx.textAlign = "right";
+        ctx.fillStyle = STYLE.drawer.value;
+        ctx.fillText(valueText, w - 10, rowY);
+      }
+
+    }
     ctx.restore();
 
     return origOnDrawForeground?.apply(this, arguments);
