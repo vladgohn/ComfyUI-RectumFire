@@ -63,7 +63,7 @@ jobs:
         run: |
           curl --fail-with-body \
             --request PUT \
-            --url https://api.comfy.org/publishers/vladgohn/nodes/ComfyUI-RectumFire \
+            --url https://api.comfy.org/publishers/vladgohn/nodes/rectumfire \
             --header "Authorization: Bearer ${REGISTRY_ACCESS_TOKEN}" \
             --header "Content-Type: application/json" \
             --data @registry_metadata.json

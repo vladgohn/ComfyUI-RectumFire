@@ -99,5 +99,5 @@ After publish succeeds:
 
 1. Open the registry
 2. Search for:
-   - `ComfyUI-RectumFire`
+   - `rectumfire`
 3. Confirm the node pack appears in search / manager
