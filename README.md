@@ -103,6 +103,11 @@ ComfyUI subgraphs still have a major usability problem: getting visual informati
 This is not just decoration.
 If you use modular or nested workflows, this is genuinely useful every day.
 
+> **Important**
+> The old frontend behavior is fine, but the newer ComfyUI frontend/subgraph changes made `Fire Banner` unstable and sometimes unpredictable.
+> Right now that is an upstream frontend problem, not a finished redesign of this node.
+> Once that frontend behavior settles down, `Fire Banner` will be adjusted to match it properly.
+
 ## Fire Switch
 
 ![Fire Switch](screens/fire_switch.png)
@@ -124,11 +129,19 @@ That behavior is known, planned, and not implemented yet.
 
 ## Fire Timer
 
-![Fire Timer](screens/fire_timer.png)
+![Fire Timer](screens/fire_timer2.png)
 
 `Fire Timer` is a runtime clock you actually want to keep on the canvas.
 
 It gives immediate visual feedback that a workflow is running, keeps the final elapsed time visible when execution ends, and does it with a UI that is intentionally more stylish than a plain debug widget.
+
+The expanded timer drawer now also keeps the last three runs inside the workflow:
+- final render time
+- render date
+- GPU name and VRAM used for that run
+
+That matters when you come back to a workflow later, compare runs, or share it with someone else.
+`20 seconds` is much more useful when you can also see which GPU produced that result.
 
 This is one of those nodes that becomes hard to live without once you start using it.
 

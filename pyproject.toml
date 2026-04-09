@@ -1,5 +1,5 @@
 [project]
-name = "rectumfire"
+name = "ComfyUI-RectumFire"
 version = "1.0.36"
 description = "Daily-use ComfyUI utilities for workflow repair, subgraph previews, clean switching, and better run feedback."
 license = { file = "LICENSE" }
@@ -15,6 +15,6 @@ Documentation = "https://github.com/vladgohn/ComfyUI-RectumFire#readme"
 
 [tool.comfy]
 PublisherId = "vladgohn"
-DisplayName = "RectumFire"
+DisplayName = "ComfyUI-RectumFire"
 Icon = "https://raw.githubusercontent.com/vladgohn/ComfyUI-RectumFire/main/branding/icon.jpg"
 requires-comfyui = ">=1.0.0"

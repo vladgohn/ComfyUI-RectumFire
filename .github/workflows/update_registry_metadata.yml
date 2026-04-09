@@ -1,0 +1,69 @@
+name: Update Comfy registry metadata
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - "pyproject.toml"
+      - "branding/**"
+
+jobs:
+  update-metadata:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Build metadata payload
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, tomllib
+          from pathlib import Path
+
+          data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+          project = data.get("project", {})
+          comfy = data.get("tool", {}).get("comfy", {})
+
+          payload = {
+              "id": project["name"],
+              "name": comfy.get("DisplayName") or project["name"],
+              "description": project.get("description", ""),
+              "icon": comfy.get("Icon", ""),
+              "banner_url": comfy.get("Banner", ""),
+              "repository": project.get("urls", {}).get("Repository", ""),
+              "license": "LICENSE",
+              "preempted_comfy_node_names": [
+                  "RectumFireTimer",
+                  "RectumFireDone",
+                  "RectumFireNote",
+                  "RectumFireSwitch",
+                  "RectumFireBanner",
+                  "🔥Fire Label",
+                  "Fire Label"
+              ],
+              "supported_os": ["OS Independent"],
+              "supported_accelerators": [],
+              "supported_comfyui_version": comfy.get("requires-comfyui", ""),
+              "supported_comfyui_frontend_version": ""
+          }
+
+          Path("registry_metadata.json").write_text(
+              json.dumps(payload, ensure_ascii=False),
+              encoding="utf-8"
+          )
+          PY
+
+      - name: Update node metadata
+        shell: bash
+        env:
+          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+        run: |
+          curl --fail-with-body \
+            --request PUT \
+            --url https://api.comfy.org/publishers/vladgohn/nodes/rectumfire \
+            --header "Authorization: Bearer ${REGISTRY_ACCESS_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data @registry_metadata.json
