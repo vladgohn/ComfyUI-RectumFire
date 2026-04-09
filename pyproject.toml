@@ -1,6 +1,11 @@
 [project]
+<<<<<<< HEAD
 name = "ComfyUI-RectumFire"
 version = "1.0.36"
+=======
+name = "rectumfire"
+version = "1.0.37"
+>>>>>>> a0e5ac63355f3ed3e6f5c531ecc9f607fc8353a2
 description = "Daily-use ComfyUI utilities for workflow repair, subgraph previews, clean switching, and better run feedback."
 license = { file = "LICENSE" }
 requires-python = ">=3.10"
