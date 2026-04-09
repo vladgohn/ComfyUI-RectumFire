@@ -6,7 +6,7 @@ This file contains the exact remaining steps that require user interaction on th
 
 Already prepared locally:
 - `pyproject.toml`
-- `.github/workflows/publish_action.yml`
+- `.github/workflows/release_rectumfire.yml`
 
 That means the repository is ready for registry publishing as soon as you create the publisher and API key.
 
@@ -74,9 +74,7 @@ What to do:
 
 ## Step 5: Trigger the first publish
 
-After the secret is added, there are two ways to publish.
-
-### Option A: manual workflow run
+After the secret is added, publish through the single release workflow.
 
 Open:
 
@@ -84,14 +82,9 @@ Open:
 
 What to do:
 
-1. Open `Publish to Comfy registry`
+1. Open `Release RectumFire`
 2. Click `Run workflow`
 3. Run it on `main`
-
-### Option B: version bump push
-
-Change the version in `pyproject.toml`, commit, and push.
-The workflow will auto-run because it watches that file on `main`.
 
 ## Step 6: Confirm the package is live
 
@@ -99,5 +92,5 @@ After publish succeeds:
 
 1. Open the registry
 2. Search for:
-   - `rectumfire`
+   - `ComfyUI-RectumFire`
 3. Confirm the node pack appears in search / manager
