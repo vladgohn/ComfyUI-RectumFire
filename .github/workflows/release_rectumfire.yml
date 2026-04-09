@@ -59,6 +59,63 @@ jobs:
           echo "Publishing version:"
           grep '^version' pyproject.toml
 
+      - name: Resolve package ids
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          text = Path("pyproject.toml").read_text(encoding="utf-8")
+
+          def extract(pattern, default=""):
+              m = re.search(pattern, text, re.M)
+              return m.group(1).strip() if m else default
+
+          project_name = extract(r'^name\s*=\s*"([^"]+)"')
+          Path(".registry_node_id").write_text(project_name, encoding="utf-8")
+          Path(".legacy_node_id").write_text("rectumfire", encoding="utf-8")
+          PY
+
+      - name: Remove legacy rectumfire package
+        if: hashFiles('.registry_node_id') != ''
+        shell: bash
+        env:
+          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+        run: |
+          NODE_ID="$(cat .registry_node_id)"
+          LEGACY_ID="$(cat .legacy_node_id)"
+
+          if [ "$NODE_ID" = "$LEGACY_ID" ]; then
+            echo "No legacy cleanup needed."
+            exit 0
+          fi
+
+          echo "Deleting legacy package: ${LEGACY_ID}"
+          STATUS=$(curl --silent --output /tmp/delete_legacy_body.txt --write-out "%{http_code}" \
+            --request DELETE \
+            --url "https://api.comfy.org/publishers/vladgohn/nodes/${LEGACY_ID}" \
+            --header "Authorization: Bearer ${REGISTRY_ACCESS_TOKEN}")
+
+          if [ "$STATUS" != "204" ] && [ "$STATUS" != "404" ]; then
+            cat /tmp/delete_legacy_body.txt
+            exit 1
+          fi
+
+          for i in 1 2 3 4 5 6 7 8 9 10; do
+            CHECK=$(curl --silent --output /tmp/legacy_check_body.txt --write-out "%{http_code}" \
+              --url "https://api.comfy.org/nodes/${LEGACY_ID}")
+            if [ "$CHECK" = "404" ]; then
+              echo "Legacy package removed."
+              exit 0
+            fi
+            sleep 2
+          done
+
+          echo "Legacy package still visible after delete wait."
+          cat /tmp/legacy_check_body.txt
+          exit 1
+
       - name: Publish custom node
         uses: Comfy-Org/publish-node-action@main
         with:
@@ -111,7 +168,6 @@ jobs:
               json.dumps(payload, ensure_ascii=False),
               encoding="utf-8"
           )
-          Path(".registry_node_id").write_text(project_name, encoding="utf-8")
           PY
 
       - name: Update registry metadata
