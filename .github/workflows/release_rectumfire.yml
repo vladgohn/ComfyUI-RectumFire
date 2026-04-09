@@ -81,6 +81,20 @@ jobs:
         with:
           personal_access_token: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
 
+      - name: Resolve package ids
+        shell: bash
+        run: |
+          python - <<'PY'
+          import re
+          from pathlib import Path
+
+          text = Path("pyproject.toml").read_text(encoding="utf-8")
+          m = re.search(r'^name\s*=\s*"([^"]+)"', text, re.M)
+          if not m:
+              raise SystemExit("project name not found in pyproject.toml")
+          Path(".registry_node_id").write_text(m.group(1).strip(), encoding="utf-8")
+          PY
+
       - name: Build metadata payload
         shell: bash
         run: |
