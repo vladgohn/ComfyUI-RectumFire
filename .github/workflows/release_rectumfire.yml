@@ -97,55 +97,70 @@ jobs:
           from pathlib import Path
 
           legacy_id = Path(".legacy_node_id").read_text(encoding="utf-8").strip()
-          with urllib.request.urlopen(
-              f"https://api.comfy.org/nodes/{legacy_id}/versions?include_status_reason=true"
-          ) as resp:
-              versions = json.load(resp)
+          with urllib.request.urlopen(f"https://api.comfy.org/nodes/{legacy_id}") as resp:
+              node = json.load(resp)
 
-          Path(".legacy_version_ids").write_text(
-              "\n".join(v["id"] for v in versions if v.get("id")),
+          payload = {
+              "id": node["id"],
+              "name": node.get("name", node["id"]),
+              "description": node.get("description", ""),
+              "icon": node.get("icon", ""),
+              "banner_url": node.get("banner_url", ""),
+              "repository": node.get("repository", ""),
+              "license": node.get("license", "LICENSE"),
+              "preempted_comfy_node_names": [
+                  "RectumFireTimer",
+                  "RectumFireDone",
+                  "RectumFireNote",
+                  "RectumFireSwitch",
+                  "RectumFireBanner",
+                  "🔥Fire Label",
+                  "Fire Label"
+              ],
+              "supported_os": node.get("supported_os", ["OS Independent"]),
+              "supported_accelerators": node.get("supported_accelerators", []),
+              "supported_comfyui_version": node.get("supported_comfyui_version", ">=1.0.0"),
+              "supported_comfyui_frontend_version": node.get("supported_comfyui_frontend_version", ""),
+              "status": "NodeStatusDeleted",
+              "status_detail": "Replaced by ComfyUI-RectumFire"
+          }
+
+          Path("/tmp/legacy_deleted_payload.json").write_text(
+              json.dumps(payload, ensure_ascii=False),
               encoding="utf-8",
           )
           PY
 
-          if [ -f .legacy_version_ids ] && [ -s .legacy_version_ids ]; then
-            while IFS= read -r VERSION_ID; do
-              [ -z "$VERSION_ID" ] && continue
-              STATUS=$(curl --silent --output /tmp/delete_legacy_version_body.txt --write-out "%{http_code}" \
-                --request DELETE \
-                --url "https://api.comfy.org/publishers/vladgohn/nodes/${LEGACY_ID}/versions/${VERSION_ID}" \
-                --header "Authorization: Bearer ${REGISTRY_ACCESS_TOKEN}")
-
-              if [ "$STATUS" != "204" ] && [ "$STATUS" != "404" ]; then
-                echo "Failed deleting legacy version ${VERSION_ID}"
-                cat /tmp/delete_legacy_version_body.txt
-                exit 1
-              fi
-            done < .legacy_version_ids
-          fi
-
-          STATUS=$(curl --silent --output /tmp/delete_legacy_node_body.txt --write-out "%{http_code}" \
-            --request DELETE \
+          STATUS=$(curl --silent --output /tmp/legacy_delete_body.txt --write-out "%{http_code}" \
+            --request PUT \
             --url "https://api.comfy.org/publishers/vladgohn/nodes/${LEGACY_ID}" \
-            --header "Authorization: Bearer ${REGISTRY_ACCESS_TOKEN}")
+            --header "Authorization: Bearer ${REGISTRY_ACCESS_TOKEN}" \
+            --header "Content-Type: application/json" \
+            --data @/tmp/legacy_deleted_payload.json)
+          echo "Legacy delete-mark HTTP ${STATUS}"
 
-          if [ "$STATUS" != "204" ] && [ "$STATUS" != "404" ]; then
-            echo "Failed deleting legacy node ${LEGACY_ID}"
-            cat /tmp/delete_legacy_node_body.txt
+          if [ "$STATUS" != "200" ] && [ "$STATUS" != "404" ]; then
+            echo "Failed marking legacy node ${LEGACY_ID} as deleted"
+            cat /tmp/legacy_delete_body.txt
             exit 1
           fi
 
           for i in 1 2 3 4 5 6 7 8 9 10; do
             CHECK=$(curl --silent --output /tmp/legacy_check_body.txt --write-out "%{http_code}" \
               --url "https://api.comfy.org/nodes/${LEGACY_ID}")
+            echo "Legacy visibility check ${i}: HTTP ${CHECK}"
             if [ "$CHECK" = "404" ]; then
               echo "Legacy package removed."
+              exit 0
+            fi
+            if grep -q '"status":"NodeStatusDeleted"' /tmp/legacy_check_body.txt; then
+              echo "Legacy package marked deleted."
               exit 0
             fi
             sleep 2
           done
 
-          echo "Legacy package still visible after delete wait."
+          echo "Legacy package still active after delete wait."
           cat /tmp/legacy_check_body.txt
           exit 1
 
