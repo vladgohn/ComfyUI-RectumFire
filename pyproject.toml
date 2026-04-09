@@ -1,7 +1,7 @@
 [project]
 <<<<<<< HEAD
 name = "ComfyUI-RectumFire"
-version = "1.0.36"
+version = "1.0.37"
 =======
 name = "rectumfire"
 version = "1.0.37"
