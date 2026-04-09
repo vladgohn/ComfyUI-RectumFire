@@ -91,14 +91,47 @@ jobs:
             exit 0
           fi
 
-          echo "Deleting legacy package: ${LEGACY_ID}"
-          STATUS=$(curl --silent --output /tmp/delete_legacy_body.txt --write-out "%{http_code}" \
+          python - <<'PY'
+          import json
+          import urllib.request
+          from pathlib import Path
+
+          legacy_id = Path(".legacy_node_id").read_text(encoding="utf-8").strip()
+          with urllib.request.urlopen(
+              f"https://api.comfy.org/nodes/{legacy_id}/versions?include_status_reason=true"
+          ) as resp:
+              versions = json.load(resp)
+
+          Path(".legacy_version_ids").write_text(
+              "\n".join(v["id"] for v in versions if v.get("id")),
+              encoding="utf-8",
+          )
+          PY
+
+          if [ -f .legacy_version_ids ] && [ -s .legacy_version_ids ]; then
+            while IFS= read -r VERSION_ID; do
+              [ -z "$VERSION_ID" ] && continue
+              STATUS=$(curl --silent --output /tmp/delete_legacy_version_body.txt --write-out "%{http_code}" \
+                --request DELETE \
+                --url "https://api.comfy.org/publishers/vladgohn/nodes/${LEGACY_ID}/versions/${VERSION_ID}" \
+                --header "Authorization: Bearer ${REGISTRY_ACCESS_TOKEN}")
+
+              if [ "$STATUS" != "204" ] && [ "$STATUS" != "404" ]; then
+                echo "Failed deleting legacy version ${VERSION_ID}"
+                cat /tmp/delete_legacy_version_body.txt
+                exit 1
+              fi
+            done < .legacy_version_ids
+          fi
+
+          STATUS=$(curl --silent --output /tmp/delete_legacy_node_body.txt --write-out "%{http_code}" \
             --request DELETE \
             --url "https://api.comfy.org/publishers/vladgohn/nodes/${LEGACY_ID}" \
             --header "Authorization: Bearer ${REGISTRY_ACCESS_TOKEN}")
 
           if [ "$STATUS" != "204" ] && [ "$STATUS" != "404" ]; then
-            cat /tmp/delete_legacy_body.txt
+            echo "Failed deleting legacy node ${LEGACY_ID}"
+            cat /tmp/delete_legacy_node_body.txt
             exit 1
           fi
 
