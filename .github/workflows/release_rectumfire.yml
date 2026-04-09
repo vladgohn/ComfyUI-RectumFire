@@ -111,6 +111,7 @@ jobs:
               json.dumps(payload, ensure_ascii=False),
               encoding="utf-8"
           )
+          Path(".registry_node_id").write_text(project_name, encoding="utf-8")
           PY
 
       - name: Update registry metadata
@@ -118,9 +119,10 @@ jobs:
         env:
           REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
         run: |
+          NODE_ID="$(cat .registry_node_id)"
           curl --fail-with-body \
             --request PUT \
-            --url https://api.comfy.org/publishers/vladgohn/nodes/rectumfire \
+            --url "https://api.comfy.org/publishers/vladgohn/nodes/${NODE_ID}" \
             --header "Authorization: Bearer ${REGISTRY_ACCESS_TOKEN}" \
             --header "Content-Type: application/json" \
             --data @registry_metadata.json
