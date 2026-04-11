@@ -18,6 +18,9 @@ const MARK = Object.freeze({
   magenta: { bg: "#2D0C20", stroke: "#901F4A", fg: "#DC6C98" },
 });
 
+const RF_RGTHREE_DRAW_GUARD = "__rf_fire_resolve_rgthree_draw_patched__";
+const RF_RGTHREE_STATUS_KEY = "__rf_fire_resolve_status__";
+
 function basename(p) {
   if (!p || typeof p !== "string") return "";
   const t = p.replaceAll("\\", "/");
@@ -150,6 +153,82 @@ function getWidgetStringValue(w) {
     if (direct) return direct;
   }
   return "";
+}
+
+function isRgthreePowerLoraLoader(node) {
+  const type = String(node?.type || node?.comfyClass || node?.title || "");
+  return type.toLowerCase().includes("power lora loader");
+}
+
+function isRgthreePowerLoraWidget(w) {
+  return !!(
+    w &&
+    /^lora_\d+$/i.test(String(w.name || "")) &&
+    w.type === "custom" &&
+    w.value &&
+    typeof w.value === "object" &&
+    "lora" in w.value
+  );
+}
+
+function getRgthreePowerLoraWidgets(node) {
+  if (!node || !Array.isArray(node.widgets)) return [];
+  return node.widgets.filter((w) => isRgthreePowerLoraWidget(w));
+}
+
+function patchRgthreeLoraWidgetDraw(widget) {
+  if (!widget || widget[RF_RGTHREE_DRAW_GUARD]) return;
+  widget[RF_RGTHREE_DRAW_GUARD] = true;
+
+  const orig = widget.draw;
+  if (typeof orig !== "function") return;
+
+  widget.draw = function fireResolveRgthreeDraw(ctx, node, w, posY, height) {
+    orig.call(this, ctx, node, w, posY, height);
+
+    try {
+      const status = this?.[RF_RGTHREE_STATUS_KEY];
+      if (!status) return;
+
+      const color = status === "ok" ? "#22C55E" : "#EF4444";
+      const radius = Math.max(3, Math.floor(height * 0.18));
+      const cx = 6 + radius;
+      const cy = posY + height * 0.5;
+
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+      ctx.fillStyle = color;
+      ctx.fill();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = "rgba(0,0,0,0.45)";
+      ctx.stroke();
+      ctx.restore();
+    } catch (_) { }
+  };
+}
+
+async function fetchRgthreeLoraFiles() {
+  const routes = [
+    "./rgthree/api/loras?format=details",
+    "rgthree/api/loras?format=details",
+    "/rgthree/api/loras?format=details",
+  ];
+
+  for (const route of routes) {
+    try {
+      const r = await fetch(route, { cache: "no-store" });
+      if (!r.ok) continue;
+      const data = await r.json();
+      if (!Array.isArray(data)) continue;
+      const files = data
+        .map((x) => (x && typeof x.file === "string" ? x.file : null))
+        .filter((x) => typeof x === "string" && x.trim());
+      if (files.length) return files;
+    } catch (_) { }
+  }
+
+  return [];
 }
 
 function markNode(node, theme) {
@@ -370,7 +449,149 @@ function resolveWidget(node, w) {
   return { state: "ok", name: w.name, value: current };
 }
 
-function resolveSelectedNode() {
+function resolveRawCandidate(rawCurrent, allCandidates) {
+  const desiredBase = String(rawCurrent || "");
+  if (!desiredBase) return null;
+
+  const onlyStrings = (allCandidates || []).filter((v) => typeof v === "string" && v.trim());
+  if (!onlyStrings.length) return null;
+
+  const clean = (s) =>
+    String(s || "")
+      .trim()
+      .replace(/^["'`]+|["'`]+$/g, "")
+      .replace(/[),;\]}]+$/g, "")
+      .trim();
+
+  const normPath = (s) => clean(s).replaceAll("\\", "/");
+  const norm = (s) => normPath(s).toLowerCase();
+  const desiredParsed = extractModelLikeName(desiredBase);
+  const desiredRaw = normPath(desiredParsed || desiredBase);
+  const desiredRawNorm = desiredRaw.toLowerCase();
+  const desiredBn = norm(basename(desiredRaw));
+
+  const stripExt = (s) => {
+    const b = basename(s);
+    const i = b.lastIndexOf(".");
+    return i > 0 ? b.slice(0, i) : b;
+  };
+
+  const prepared = onlyStrings.map((raw) => {
+    const parsed = extractModelLikeName(raw) || raw;
+    const rawNormPath = normPath(raw);
+    const parsedNormPath = normPath(parsed);
+    return {
+      raw,
+      rawNormPath,
+      rawNormLower: rawNormPath.toLowerCase(),
+      rawBaseNorm: norm(basename(rawNormPath)),
+      parsedBaseNorm: norm(basename(parsedNormPath)),
+      rawBaseNoExtNorm: norm(stripExt(rawNormPath)),
+      parsedBaseNoExtNorm: norm(stripExt(parsedNormPath)),
+    };
+  });
+
+  const fullEqCase = prepared.find((c) => c.rawNormPath === desiredRaw);
+  if (fullEqCase) return fullEqCase.raw;
+
+  const fullEq = prepared.find((c) => c.rawNormLower === desiredRawNorm);
+  if (fullEq) return fullEq.raw;
+
+  const desiredBaseCase = basename(desiredRaw);
+  const baseEqCase = prepared.find((c) => basename(c.rawNormPath) === desiredBaseCase);
+  if (baseEqCase) return baseEqCase.raw;
+
+  const baseEq = prepared.find((c) => c.rawBaseNorm === desiredBn || c.parsedBaseNorm === desiredBn);
+  if (baseEq) return baseEq.raw;
+
+  const desiredNoExtNorm = norm(stripExt(desiredRaw));
+  if (desiredNoExtNorm) {
+    const noExtEq = prepared.find(
+      (c) => c.rawBaseNoExtNorm === desiredNoExtNorm || c.parsedBaseNoExtNorm === desiredNoExtNorm
+    );
+    if (noExtEq) return noExtEq.raw;
+  }
+
+  return null;
+}
+
+function setRgthreeLoraWidgetValue(widget, candidateRaw) {
+  if (!widget || !isRgthreePowerLoraWidget(widget)) return false;
+  try {
+    if (typeof widget.setLora === "function") {
+      widget.setLora(candidateRaw);
+    } else {
+      widget.value = { ...(widget.value || {}), lora: candidateRaw };
+    }
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function resolveRgthreePowerLoraNode(node) {
+  const widgets = getRgthreePowerLoraWidgets(node);
+  if (!widgets.length) {
+    markNode(node, "magenta");
+    showtoster("magenta", "Resolve finished", ["Power Lora Loader has no LoRA rows."], 4000);
+    return;
+  }
+
+  for (const w of widgets) patchRgthreeLoraWidgetDraw(w);
+
+  const candidates = await fetchRgthreeLoraFiles();
+  if (!candidates.length) {
+    markNode(node, "magenta");
+    showtoster("magenta", "Resolve finished", ["Could not load available rgthree LoRA files."], 5000);
+    return;
+  }
+
+  let totalOk = 0;
+  let totalFixed = 0;
+  let totalFail = 0;
+  let totalSkip = 0;
+
+  for (const w of widgets) {
+    const current = String(w?.value?.lora || "").trim();
+    if (!current || current.toLowerCase() === "none") {
+      w[RF_RGTHREE_STATUS_KEY] = null;
+      totalSkip += 1;
+      continue;
+    }
+
+    const fixed = resolveRawCandidate(current, candidates);
+    if (!fixed) {
+      w[RF_RGTHREE_STATUS_KEY] = "missing";
+      totalFail += 1;
+      continue;
+    }
+
+    const same = fixed === current;
+    if (!same) {
+      setRgthreeLoraWidgetValue(w, fixed);
+      totalFixed += 1;
+    } else {
+      totalOk += 1;
+    }
+
+    w[RF_RGTHREE_STATUS_KEY] = "ok";
+  }
+
+  try {
+    node.setDirtyCanvas(true, true);
+  } catch (_) { }
+
+  if (totalFail > 0) {
+    markNode(node, "magenta");
+    showtoster("magenta", "Resolve finished", [`Found: ${totalOk + totalFixed}`, `Missing: ${totalFail}`, `Skipped: ${totalSkip}`], 6000);
+    return;
+  }
+
+  markNode(node, "green");
+  showtoster("green", "Resolve finished", [`Found: ${totalOk + totalFixed}`, `Missing: 0`, `Skipped: ${totalSkip}`], 5000);
+}
+
+async function resolveSelectedNode() {
   const node = getSelectedNodeSafe();
   if (!node) {
     showtoster("magenta", "No node selected", ["Select a node and press Shift+Alt+R."], 3500);
@@ -378,6 +599,11 @@ function resolveSelectedNode() {
   }
 
   patchNodeDraw(node);
+
+  if (isRgthreePowerLoraLoader(node)) {
+    await resolveRgthreePowerLoraNode(node);
+    return;
+  }
 
   const widgets = findPathWidgets(node);
   if (!widgets.length) {
@@ -424,7 +650,7 @@ function onKeyDown(e) {
 
     e.preventDefault();
     e.stopPropagation();
-    resolveSelectedNode();
+    void resolveSelectedNode();
   } catch (_) { }
 }
 
