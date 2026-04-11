@@ -7,6 +7,26 @@ const TITLE_DONE = "💯";
 const TITLE_IDLE = "🔥Fire🔊";
 const DONE_AUDIO_FILE = "./assets/done.wav";
 
+function ensureToggleWidget(node, name, defaultValue) {
+  if (!node) return;
+  const widgets = Array.isArray(node.widgets) ? node.widgets : [];
+  if (widgets.find((w) => w?.name === name)) return;
+
+  if (typeof node.addWidget !== "function") return;
+
+  node.addWidget("toggle", name, !!defaultValue, undefined, {
+    on: "true",
+    off: "false",
+  });
+}
+
+function ensureDoneWidgets(node) {
+  if (!node) return;
+  ensureToggleWidget(node, "enable", true);
+  ensureToggleWidget(node, "clear_vram", true);
+  node.setDirtyCanvas?.(true, true);
+}
+
 function setTitle(node, t) {
   node.title = t;
   node.setDirtyCanvas?.(true, true);
@@ -93,7 +113,19 @@ app.registerExtension({
     nodeType.prototype.onNodeCreated = function () {
       prevCreated?.apply(this, arguments);
 
+      ensureDoneWidgets(this);
       setIdleTitle(this);
+
+      setTimeout(() => {
+        setNodeWidthOnly(this, NODE_WIDTH);
+      }, 0);
+    };
+
+    const prevConfigure = nodeType.prototype.onConfigure;
+    nodeType.prototype.onConfigure = function () {
+      prevConfigure?.apply(this, arguments);
+
+      ensureDoneWidgets(this);
 
       setTimeout(() => {
         setNodeWidthOnly(this, NODE_WIDTH);

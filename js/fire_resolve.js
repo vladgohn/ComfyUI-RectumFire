@@ -20,6 +20,7 @@ const MARK = Object.freeze({
 
 const RF_RGTHREE_DRAW_GUARD = "__rf_fire_resolve_rgthree_draw_patched__";
 const RF_RGTHREE_STATUS_KEY = "__rf_fire_resolve_status__";
+const RF_RGTHREE_STACK_STATUSES_KEY = "__rf_fire_resolve_rgthree_stack_statuses__";
 
 function basename(p) {
   if (!p || typeof p !== "string") return "";
@@ -160,6 +161,11 @@ function isRgthreePowerLoraLoader(node) {
   return type.toLowerCase().includes("power lora loader");
 }
 
+function isRgthreeLoraLoaderStack(node) {
+  const type = String(node?.type || node?.comfyClass || node?.title || "");
+  return type.toLowerCase().includes("lora loader stack");
+}
+
 function isRgthreePowerLoraWidget(w) {
   return !!(
     w &&
@@ -174,6 +180,15 @@ function isRgthreePowerLoraWidget(w) {
 function getRgthreePowerLoraWidgets(node) {
   if (!node || !Array.isArray(node.widgets)) return [];
   return node.widgets.filter((w) => isRgthreePowerLoraWidget(w));
+}
+
+function getRgthreeLoraStackWidgets(node) {
+  if (!node || !Array.isArray(node.widgets)) return [];
+  return node.widgets.filter((w) => {
+    if (!w) return false;
+    if (!/^lora_\d+$/i.test(String(w.name || ""))) return false;
+    return isComboWidget(w) || typeof w.value === "string";
+  });
 }
 
 function patchRgthreeLoraWidgetDraw(widget) {
@@ -287,6 +302,45 @@ function patchNodeDraw(node) {
       ctx.lineWidth = 1;
       ctx.strokeStyle = pal.stroke;
       ctx.stroke();
+      ctx.restore();
+    } catch (_) { }
+
+    try {
+      const statuses = this?.[RF_RGTHREE_STACK_STATUSES_KEY];
+      if (!statuses || typeof statuses !== "object") return;
+
+      const widgets = Array.isArray(this.widgets) ? this.widgets : [];
+      if (!widgets.length) return;
+
+      const titleH =
+        (typeof this?.title_height === "number" && this.title_height) ||
+        (typeof LiteGraph?.NODE_TITLE_HEIGHT === "number" && LiteGraph.NODE_TITLE_HEIGHT) ||
+        30;
+      const widgetH =
+        (typeof LiteGraph?.NODE_WIDGET_HEIGHT === "number" && LiteGraph.NODE_WIDGET_HEIGHT) ||
+        20;
+      const spacing = 4;
+      const startY =
+        (typeof this?.widgets_start_y === "number" && this.widgets_start_y) ||
+        titleH + 6;
+
+      ctx.save();
+      for (let i = 0; i < widgets.length; i += 1) {
+        const w = widgets[i];
+        const status = statuses[String(w?.name || "")];
+        if (!status) continue;
+
+        const color = status === "ok" ? "#22C55E" : "#EF4444";
+        const cy = startY + (i * (widgetH + spacing)) + (widgetH * 0.5);
+
+        ctx.beginPath();
+        ctx.arc(10, cy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(0,0,0,0.45)";
+        ctx.stroke();
+      }
       ctx.restore();
     } catch (_) { }
   };
@@ -591,6 +645,82 @@ async function resolveRgthreePowerLoraNode(node) {
   showtoster("green", "Resolve finished", [`Found: ${totalOk + totalFixed}`, `Missing: 0`, `Skipped: ${totalSkip}`], 5000);
 }
 
+async function resolveRgthreeLoraStackNode(node) {
+  const widgets = getRgthreeLoraStackWidgets(node);
+  if (!widgets.length) {
+    try {
+      node[RF_RGTHREE_STACK_STATUSES_KEY] = {};
+    } catch (_) { }
+    markNode(node, "magenta");
+    showtoster("magenta", "Resolve finished", ["Lora Loader Stack has no LoRA fields."], 4000);
+    return;
+  }
+
+  const candidates = await fetchRgthreeLoraFiles();
+  if (!candidates.length) {
+    try {
+      node[RF_RGTHREE_STACK_STATUSES_KEY] = {};
+    } catch (_) { }
+    markNode(node, "magenta");
+    showtoster("magenta", "Resolve finished", ["Could not load available rgthree LoRA files."], 5000);
+    return;
+  }
+
+  const statuses = {};
+  let totalOk = 0;
+  let totalFixed = 0;
+  let totalFail = 0;
+  let totalSkip = 0;
+
+  for (const w of widgets) {
+    const current = String(getWidgetStringValue(w) || "").trim();
+    const widgetName = String(w?.name || "");
+
+    if (!current || current.toLowerCase() === "none") {
+      totalSkip += 1;
+      statuses[widgetName] = null;
+      continue;
+    }
+
+    const fixed = resolveRawCandidate(current, candidates);
+    if (!fixed) {
+      totalFail += 1;
+      statuses[widgetName] = "missing";
+      continue;
+    }
+
+    if (fixed !== current) {
+      if (!setComboValue(w, fixed)) {
+        try {
+          w.value = fixed;
+        } catch (_) { }
+      }
+      try {
+        if (typeof w.callback === "function") w.callback(w.value, app.canvas, node, w);
+      } catch (_) { }
+      totalFixed += 1;
+    } else {
+      totalOk += 1;
+    }
+
+    statuses[widgetName] = "ok";
+  }
+
+  try {
+    node[RF_RGTHREE_STACK_STATUSES_KEY] = statuses;
+    node.setDirtyCanvas(true, true);
+  } catch (_) { }
+
+  if (totalFail > 0) {
+    markNode(node, "magenta");
+    showtoster("magenta", "Resolve finished", [`Found: ${totalOk + totalFixed}`, `Missing: ${totalFail}`, `Skipped: ${totalSkip}`], 6000);
+    return;
+  }
+
+  markNode(node, "green");
+  showtoster("green", "Resolve finished", [`Found: ${totalOk + totalFixed}`, `Missing: 0`, `Skipped: ${totalSkip}`], 5000);
+}
+
 async function resolveSelectedNode() {
   const node = getSelectedNodeSafe();
   if (!node) {
@@ -602,6 +732,11 @@ async function resolveSelectedNode() {
 
   if (isRgthreePowerLoraLoader(node)) {
     await resolveRgthreePowerLoraNode(node);
+    return;
+  }
+
+  if (isRgthreeLoraLoaderStack(node)) {
+    await resolveRgthreeLoraStackNode(node);
     return;
   }
 
