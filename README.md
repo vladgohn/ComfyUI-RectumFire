@@ -63,6 +63,12 @@ The value is simple:
 - less typing
 - less stupid repair work
 
+> **Update**
+> `Fire Resolve` now also supports `rgthree Power Lora Loader` and `rgthree Lora Loader Stack`.
+> It can resolve their LoRA rows against your locally available LoRA files, and shows a clear per-row status:
+> green if the LoRA is found, red if it is missing.
+> This matters because these rgthree loader nodes are widely used in real workflows, and partial LoRA failure is otherwise easy to miss.
+
 ## Fire Copy
 
 Hotkey: `Shift + Alt + C`
@@ -160,6 +166,11 @@ The difference is that `Fire Done` is intentionally simpler, lighter, and comes 
 This version is intentionally simpler than some alternatives.
 No bloated sound-picker UI, no extra overdesign.
 If you want another sound, replace `js/assets/done.wav`.
+
+> **Update**
+> `Fire Done` now also includes optional VRAM cleanup.
+> A new `clear_vram` toggle is enabled by default, so heavy workflows can ring the completion sound and clear used VRAM in the same final node.
+> This keeps end-of-run setups cleaner, especially for long video or other memory-heavy renders where `Done` and VRAM cleanup are usually placed together anyway.
 
 ## Fire Label
 
