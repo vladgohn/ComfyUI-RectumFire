@@ -68,6 +68,18 @@ function drawAlignedTextWithSpacing(ctx, text, anchorX, y, align, lineWidth, spa
   drawTextWithSpacing(ctx, text, startX, y, spacingPx);
 }
 
+function applyTransparentChrome(node) {
+  if (!node) return;
+  const transparent = "rgba(0,0,0,0)";
+  node.color = transparent;
+  node.bgcolor = transparent;
+  node.boxcolor = transparent;
+  node.groupcolor = transparent;
+  node.title_color = transparent;
+  node.title_text_color = transparent;
+  node.titleTextColor = transparent;
+ }
+
 class FireLabel extends LiteGraph.LGraphNode {
   static type  = "🔥Fire Label";
   static title = "🔥Fire Label";
@@ -94,8 +106,7 @@ class FireLabel extends LiteGraph.LGraphNode {
     this.properties["borderRadius"] = 6;
     this.properties["letterSpacing"] = -2.5; // Letter spacing in PIXELS (negative = tighter)
 
-    this.color   = "#0000";
-    this.bgcolor = "#0000";
+    applyTransparentChrome(this);
     this.size = this.size || [260, 80];
 
     this.isVirtualNode = true;
@@ -112,8 +123,7 @@ class FireLabel extends LiteGraph.LGraphNode {
   }
 
   draw(ctx) {
-    this.color   = "#0000";
-    this.bgcolor = "#0000";
+    applyTransparentChrome(this);
 
     const fontSize = Math.max(Number(this.properties["fontSize"] || 1), 1);
     const fontColor = this.properties["fontColor"] || "#ffffff";
@@ -178,6 +188,7 @@ class FireLabel extends LiteGraph.LGraphNode {
 const oldDrawNode = LiteGraph.LGraphCanvas.prototype.drawNode;
 LiteGraph.LGraphCanvas.prototype.drawNode = function (node, ctx) {
   if (node && node.constructor === FireLabel) {
+    applyTransparentChrome(node);
     const v = oldDrawNode.apply(this, arguments);
     node.draw(ctx);
     return v;
