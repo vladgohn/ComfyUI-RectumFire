@@ -80,6 +80,31 @@ function applyTransparentChrome(node) {
   node.titleTextColor = transparent;
  }
 
+function normalizeBackgroundColor(value) {
+  if (value == null) return "transparent";
+  const raw = String(value).trim();
+  const normalized = raw.toLowerCase();
+  if (!normalized) return "transparent";
+  if (
+    normalized === "transparent" ||
+    normalized === "none" ||
+    normalized === "#0000" ||
+    normalized === "#00000000" ||
+    normalized === "rgba(0,0,0,0)"
+  ) {
+    return "transparent";
+  }
+  if (
+    normalized === "#000" ||
+    normalized === "#000000" ||
+    normalized === "black" ||
+    normalized === "rgb(0,0,0)"
+  ) {
+    return "transparent";
+  }
+  return raw;
+}
+
 class FireLabel extends LiteGraph.LGraphNode {
   static type  = "🔥Fire Label";
   static title = "🔥Fire Label";
@@ -113,6 +138,12 @@ class FireLabel extends LiteGraph.LGraphNode {
     this.serialize_widgets = true;
   }
 
+  onConfigure() {
+    this.properties = this.properties || {};
+    this.properties["backgroundColor"] = normalizeBackgroundColor(this.properties["backgroundColor"]);
+    applyTransparentChrome(this);
+  }
+
   onDblClick() {
     LiteGraph?.LGraphCanvas?.active_canvas?.showShowNodePanel?.(this);
   }
@@ -127,7 +158,8 @@ class FireLabel extends LiteGraph.LGraphNode {
 
     const fontSize = Math.max(Number(this.properties["fontSize"] || 1), 1);
     const fontColor = this.properties["fontColor"] || "#ffffff";
-    const backgroundColor = this.properties["backgroundColor"] || "transparent";
+    const backgroundColor = normalizeBackgroundColor(this.properties["backgroundColor"]);
+    this.properties["backgroundColor"] = backgroundColor;
     const padding = Number(this.properties["padding"] ?? 0) || 0;
     const borderRadius = Number(this.properties["borderRadius"] ?? 0) || 0;
 
@@ -189,9 +221,8 @@ const oldDrawNode = LiteGraph.LGraphCanvas.prototype.drawNode;
 LiteGraph.LGraphCanvas.prototype.drawNode = function (node, ctx) {
   if (node && node.constructor === FireLabel) {
     applyTransparentChrome(node);
-    const v = oldDrawNode.apply(this, arguments);
     node.draw(ctx);
-    return v;
+    return;
   }
   return oldDrawNode.apply(this, arguments);
 };
