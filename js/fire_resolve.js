@@ -1,14 +1,15 @@
-// FireResolve — RectumFire DOM tosters + node coloring
-// Hotkey: Shift+Alt+R (raw keydown; robust listener attach)
+// FireResolve - RectumFire DOM tosters + node coloring
+// Hotkey: Shift+Alt+R registered through ComfyUI commands/keybindings.
 
 import { app } from "../../scripts/app.js";
 import { firetosterShow } from "./fire_toster.js";
 
 const RF = Object.freeze({
   EXT_NAME: "RectumFireResolve",
-  // IMPORTANT: do NOT use the old guard as an early-return gate.
-  // Use a dedicated listener guard so updates can't "brick" the handler.
+  COMMAND_ID: "RectumFire.Resolve",
   LISTENER_GUARD: "__rf_fire_resolve_listener_attached__",
+  LISTENER_HANDLER: "__rf_fire_resolve_keydown_handler__",
+  LISTENER_VERSION: 9,
   HOTKEY: { key: "r", shiftKey: true, altKey: true },
 });
 
@@ -771,37 +772,106 @@ async function resolveSelectedNode() {
   showtoster("green", "Resolve finished", [`Fixed: ${totalFixed}`, `Already OK: ${totalOk}`, `Skipped: ${totalSkip}`], 5000);
 }
 
-function onKeyDown(e) {
+function detachLegacyListener() {
+  try {
+    const g = globalThis;
+    const existing = g[RF.LISTENER_HANDLER];
+
+    if (existing && typeof existing.fn === "function") {
+      try { window.removeEventListener("keydown", existing.fn, { capture: true }); } catch (_) { }
+      try { window.removeEventListener("keyup", existing.fn, { capture: true }); } catch (_) { }
+      try { document.removeEventListener("keydown", existing.fn, { capture: true }); } catch (_) { }
+      try { document.removeEventListener("keyup", existing.fn, { capture: true }); } catch (_) { }
+    }
+
+    if (existing && typeof existing.keydown === "function") {
+      try { window.removeEventListener("keydown", existing.keydown, { capture: true }); } catch (_) { }
+      try { document.removeEventListener("keydown", existing.keydown, { capture: true }); } catch (_) { }
+    }
+
+    if (existing && typeof existing.keyup === "function") {
+      try { window.removeEventListener("keyup", existing.keyup, { capture: true }); } catch (_) { }
+      try { document.removeEventListener("keyup", existing.keyup, { capture: true }); } catch (_) { }
+    }
+
+    g[RF.LISTENER_HANDLER] = { version: RF.LISTENER_VERSION, fn: null };
+    g[RF.LISTENER_GUARD] = false;
+  } catch (_) { }
+}
+
+function isResolveHotkeyEvent(e) {
+  if (!e) return false;
+  if (!!e.shiftKey !== !!RF.HOTKEY.shiftKey) return false;
+  if (!!e.altKey !== !!RF.HOTKEY.altKey) return false;
+
+  const key = String(e.key || "").toLowerCase();
+  const code = String(e.code || "");
+  return key === RF.HOTKEY.key || code === "KeyR";
+}
+
+function fireResolveFromHotkey(e) {
   try {
     if (!e) return;
-    const k = String(e.key || "").toLowerCase();
-    if (k !== RF.HOTKEY.key) return;
-    if (!!e.shiftKey !== !!RF.HOTKEY.shiftKey) return;
-    if (!!e.altKey !== !!RF.HOTKEY.altKey) return;
+    if (!isResolveHotkeyEvent(e)) return;
 
-    // Avoid messing with inputs.
     const tag = (e.target && e.target.tagName) ? String(e.target.tagName).toLowerCase() : "";
     if (tag === "input" || tag === "textarea" || tag === "select") return;
 
+    const g = globalThis;
+    const now = Date.now();
+    if (now - (g.__rf_fire_resolve_last_run__ || 0) < 350) return;
+    g.__rf_fire_resolve_last_run__ = now;
+
+    if (e.__rf_fire_resolve_handled__) return;
+    e.__rf_fire_resolve_handled__ = true;
     e.preventDefault();
     e.stopPropagation();
     void resolveSelectedNode();
   } catch (_) { }
 }
 
-function attachListenerOnce() {
+function attachResolveHotkeyFallback() {
   try {
     const g = globalThis;
-    if (g[RF.LISTENER_GUARD]) return;
-    g[RF.LISTENER_GUARD] = true;
+    const existing = g[RF.LISTENER_HANDLER];
+    if (existing && existing.version === RF.LISTENER_VERSION && existing.fn === fireResolveFromHotkey) return;
 
-    window.addEventListener("keydown", onKeyDown, { capture: true });
+    if (existing && typeof existing.fn === "function") {
+      try { window.removeEventListener("keydown", existing.fn, { capture: true }); } catch (_) { }
+      try { window.removeEventListener("keyup", existing.fn, { capture: true }); } catch (_) { }
+      try { document.removeEventListener("keydown", existing.fn, { capture: true }); } catch (_) { }
+      try { document.removeEventListener("keyup", existing.fn, { capture: true }); } catch (_) { }
+    }
+
+    g[RF.LISTENER_HANDLER] = { version: RF.LISTENER_VERSION, fn: fireResolveFromHotkey };
+    g[RF.LISTENER_GUARD] = true;
+    window.addEventListener("keydown", fireResolveFromHotkey, { capture: true });
+    window.addEventListener("keyup", fireResolveFromHotkey, { capture: true });
+    document.addEventListener("keydown", fireResolveFromHotkey, { capture: true });
+    document.addEventListener("keyup", fireResolveFromHotkey, { capture: true });
   } catch (_) { }
 }
 
 app.registerExtension({
   name: RF.EXT_NAME,
+  commands: [
+    {
+      id: RF.COMMAND_ID,
+      label: "Fire Resolve selected node",
+      function: () => {
+        void resolveSelectedNode();
+      },
+    },
+  ],
+  keybindings: [
+    {
+      commandId: RF.COMMAND_ID,
+      combo: { key: "r", shift: true, alt: true },
+      targetElementId: "graph-canvas",
+    },
+  ],
   async setup() {
-    attachListenerOnce();
+    detachLegacyListener();
+    attachResolveHotkeyFallback();
   },
 });
