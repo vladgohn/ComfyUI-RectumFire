@@ -3,6 +3,7 @@ import { api } from "/scripts/api.js";
 
 // Fire Banner + Fire Load Image
 // Draws directly on the subgraph host node (classic LiteGraph canvas), without widget promotion:
+//  - previews are drawn above the node widgets
 //  - input section: preview of every Fire Load Image inside the subgraph; drop an image file on it
 //    or click it to upload a new image into that loader
 //  - output section: live sampler frames while anything inside is sampling, then the Fire Banner image
@@ -246,6 +247,7 @@ function hostLayout(node) {
 // Hosts with widgets are handled in _arrangeWidgets (see installHostHooks).
 function ensureHostRoom(node) {
   if (!node || node.flags?.collapsed) return;
+  if (node.widgets?.length) return; // laid out by the spacer in getLayoutWidgets
   const reserve = previewReserve(node);
   if (!reserve) return;
   if (node.size[0] < HOST_MIN_W) node.setSize?.([HOST_MIN_W, node.size[1]]);
@@ -335,9 +337,9 @@ function installHostHooks() {
     return r;
   };
 
-  // Growable widgets (multiline text) take all free height. On hosts with previews, add a fixed-height
-  // layout-only spacer after the widgets: the layout then leaves room for the previews (and grows the
-  // node when needed), and the spacer's y tells where the previews start. It is never drawn.
+  // Growable widgets (multiline text) take all free height. On hosts with previews, put a fixed-height
+  // layout-only spacer before the widgets: previews sit on top, widgets below them, and a growable text
+  // field ends at the bottom of the node. The spacer's y tells where the previews start. It is never drawn.
   const prevLayoutWidgets = proto.getLayoutWidgets;
   if (typeof prevLayoutWidgets === "function") {
     proto.getLayoutWidgets = function () {
@@ -351,7 +353,7 @@ function installHostHooks() {
       }
       const spacer = this.__rf_spacer ?? (this.__rf_spacer = { name: "$$rf_preview_spacer", type: "rf_spacer" });
       spacer.computeSize = () => [this.size[0], reserve - 4]; // the layout adds 4px per widget
-      return [...list, spacer];
+      return [spacer, ...list];
     };
   }
 
