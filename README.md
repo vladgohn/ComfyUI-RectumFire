@@ -103,16 +103,26 @@ They are the foundation of the whole pack.
 
 `Fire Banner` is the killer feature of this pack.
 
-ComfyUI subgraphs still have a major usability problem: getting visual information out of them in a practical way.
-`Fire Banner` solves that by surfacing preview information outward, which makes subgraphs much easier to monitor and debug.
+ComfyUI subgraphs hide what happens inside them: once a sampler sits in a subgraph, you no longer see it render.
+On the classic (LiteGraph) canvas the current frontend does not draw promoted previews on the subgraph node at all
+(upstream: [ComfyUI_frontend#9859](https://github.com/Comfy-Org/ComfyUI_frontend/issues/9859)).
+Nodes 2.0 shows them, but many custom nodes do not render there yet.
 
-This is not just decoration.
-If you use modular or nested workflows, this is genuinely useful every day.
+`Fire Banner` draws the preview directly on the collapsed subgraph node, on the classic canvas:
 
-> **Important**
-> The old frontend behavior is fine, but the newer ComfyUI frontend/subgraph changes made `Fire Banner` unstable and sometimes unpredictable.
-> Right now that is an upstream frontend problem, not a finished redesign of this node.
-> Once that frontend behavior settles down, `Fire Banner` will be adjusted to match it properly.
+- **Live sampling preview** — while anything inside the subgraph is sampling (KSampler or any node that sends preview frames), the frames appear on the subgraph node with a small green `LIVE` tag. This works for every subgraph, even without a `Fire Banner` node inside.
+- **Final image** — when the `Fire Banner` node inside the subgraph executes, its image replaces the live frames. Without a banner, the last `Preview Image` / `Save Image` output inside the subgraph is shown instead.
+- **Nested subgraphs** — the preview appears on every parent subgraph node up to the root.
+- The subgraph node grows automatically when it has no room for the image; resize it freely afterwards and the image fits.
+
+Usage: put `Fire Banner` inside the subgraph and connect your final `IMAGE` to it. Widget promotion is no longer needed.
+
+Notes:
+
+- Live frames require a live preview method (Settings → Execution → Live preview method, e.g. `latent2rgb` or `auto`).
+- The preview lives in the browser tab only; after a page reload it appears again on the next run.
+- `Fire Banner` writes its image to ComfyUI `temp`, not `output`. Add `Save Image` if you want to keep the result.
+- Tested with ComfyUI 0.39.2 / frontend 1.53.10, classic canvas.
 
 ## Fire Switch
 
@@ -213,6 +223,8 @@ It looks good, it is lightweight, and it does not depend on installing a custom 
 - make sure an image is connected
 - make sure the branch actually executed
 - make sure ComfyUI temp output is writable
+- no live frames: set a live preview method in Settings → Execution
+- hard-refresh the browser tab (F5) after updating the pack
 
 ## License
 
