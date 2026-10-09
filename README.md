@@ -20,10 +20,12 @@ That is why it is called `RectumFire`.
 - `Fire Copy`
 - `Fire Note`
 - `Fire Banner`
+- `Fire Load Image`
 - `Fire Switch`
 - `Fire Timer`
 - `Fire Done`
 - `Fire Label`
+- `Fire Links`
 
 ## Installation
 
@@ -123,6 +125,35 @@ Notes:
 - The preview lives in the browser tab only; after a page reload it appears again on the next run.
 - `Fire Banner` writes its image to ComfyUI `temp`, not `output`. Add `Save Image` if you want to keep the result.
 - Tested with ComfyUI 0.39.2 / frontend 1.53.10, classic canvas.
+
+## Fire Load Image
+
+`Fire Load Image` is the core `Load Image` made usable inside a subgraph.
+
+A normal `Load Image` inside a subgraph is unreachable once the subgraph is collapsed: there is no way to drop a new picture into it from outside.
+Put `Fire Load Image` inside the subgraph instead, and the collapsed subgraph node gets an input preview:
+
+- the preview of the current image is drawn on the subgraph node
+- drop an image file on the preview, or click it, to upload a new image into that loader
+- several `Fire Load Image` nodes in one subgraph are shown side by side; the drop goes to the one under the cursor
+- an empty loader shows a dashed `drop image / click` slot
+- output previews (`Fire Banner`, live sampling) are drawn below the input preview
+
+Previews are drawn at the top of the subgraph node, above its widgets, so a growable widget such as a promoted multiline text field sits below the picture and ends at the bottom of the node.
+
+Notes:
+
+- clicking the preview opens the file picker, so drag the subgraph node by its title
+- double-click on a subgraph node still opens the subgraph
+- to pick an already uploaded file from the list, promote the `image` widget with Edit subgraph widgets
+
+## Fire Links
+
+`Fire Links` is a frontend fix for links inside subgraphs.
+
+Links from the subgraph input node sometimes leave the input to the left and bend back in a loop.
+The frontend takes the start direction of these links from the target input, and some inputs carry `dir = LEFT`.
+`Fire Links` starts such links to the right, so they run straight again. Other links are not touched.
 
 ## Fire Switch
 
