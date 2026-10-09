@@ -194,7 +194,7 @@ It looks good, it is lightweight, and it does not depend on installing a custom 
 
 ## Notes
 
-- The backend nodes exported by the pack are `Fire Timer`, `Fire Done`, `Fire Note`, `Fire Switch`, and `Fire Banner`.
+- The backend nodes exported by the pack are `Fire Timer`, `Fire Done`, `Fire Note`, `Fire Switch`, `Fire Banner`, and `Fire Load Image`.
 - `Fire Label`, `Fire Copy`, and `Fire Resolve` are frontend tools/extensions.
 - `fire_route.py` exists in the repository but is not currently exported as an active node.
 

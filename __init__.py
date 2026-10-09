@@ -5,6 +5,7 @@ from .fire_done        import RectumFireDone
 from .fire_note        import RectumFireNote
 from .fire_switch      import RectumFireSwitch
 from .fire_banner      import RectumFireBanner
+from .fire_load_image  import RectumFireLoadImage
 
 NODE_CLASS_MAPPINGS = {
     "RectumFireTimer":      RectumFireTimer,
@@ -12,6 +13,7 @@ NODE_CLASS_MAPPINGS = {
     "RectumFireNote":       RectumFireNote,
     "RectumFireSwitch":     RectumFireSwitch,
     "RectumFireBanner":     RectumFireBanner,
+    "RectumFireLoadImage":  RectumFireLoadImage,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -20,6 +22,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RectumFireTimer":      "🔥Fire Timer",
     "RectumFireSwitch":     "🔥Fire Switch",
     "RectumFireBanner":     "🔥Fire Banner",
+    "RectumFireLoadImage":  "🔥Fire Load Image",
 }
 
 __all__ = [
