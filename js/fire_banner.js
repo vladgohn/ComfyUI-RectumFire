@@ -222,7 +222,9 @@ function hostLayout(node) {
   const spacerY = node.__rf_spacer?.y;
   const top = (Number.isFinite(spacerY) ? spacerY : Math.max(contentBottom(node), node.size[1] - reserve)) + HOST_PAD;
   const w = node.size[0] - HOST_PAD * 2;
-  const total = node.size[1] - top - HOST_PAD - HOST_GAP * (sections.length - 1);
+  // With the spacer, previews own exactly the spacer slot; widgets follow below it.
+  const bottom = Number.isFinite(spacerY) ? spacerY + reserve : node.size[1];
+  const total = bottom - top - HOST_PAD - HOST_GAP * (sections.length - 1);
   if (w < 16 || total < 16) return null;
 
   const want = sections.reduce((a, s) => a + s.h, 0);
