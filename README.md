@@ -26,6 +26,7 @@ That is why it is called `RectumFire`.
 - `Fire Done`
 - `Fire Label`
 - `Fire Links`
+- `Fire Filename`
 
 ## Installation
 
@@ -155,6 +156,14 @@ Links from the subgraph input node sometimes leave the input to the left and ben
 The frontend takes the start direction of these links from the target input, and some inputs carry `dir = LEFT`.
 `Fire Links` starts such links to the right, so they run straight again. Other links are not touched.
 
+## Fire Filename
+
+`Fire Filename` replaces the default `ComfyUI` filename prefix with the current date and time when a job is queued.
+
+- A prefix that is exactly `ComfyUI` (optionally inside a folder, e.g. `krea/ComfyUI`) becomes `2026-10-10_15-04-27`, so files from different workflows never collide as `ComfyUI_00001_.png`.
+- Custom prefixes are left untouched, and the workflow itself keeps its own value; only the queued prompt changes.
+- Settings: **RectumFire → Filename** (on/off and date template, default `yyyy-MM-dd_HH-mm-ss`).
+
 ## Fire Switch
 
 ![Fire Switch](screens/fire_switch.png)
@@ -226,7 +235,7 @@ It looks good, it is lightweight, and it does not depend on installing a custom 
 ## Notes
 
 - The backend nodes exported by the pack are `Fire Timer`, `Fire Done`, `Fire Note`, `Fire Switch`, `Fire Banner`, and `Fire Load Image`.
-- `Fire Label`, `Fire Copy`, `Fire Resolve`, and `Fire Links` are frontend tools/extensions.
+- `Fire Label`, `Fire Copy`, `Fire Resolve`, `Fire Links`, and `Fire Filename` are frontend tools/extensions.
 - `fire_route.py` exists in the repository but is not currently exported as an active node.
 
 ## Troubleshooting
