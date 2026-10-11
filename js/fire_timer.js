@@ -340,6 +340,13 @@ function fitSingleLine(ctx, text, maxW, fontPx, weight = 600) {
   return 8;
 }
 
+// Node properties are reactive in the newer frontend; store plain copies so the workflow stays
+// structured-cloneable (a reactive entry makes workflow loading fail and fall back to the API prompt).
+function plainHistory(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 3).map((e) => ({ date: String(e?.date ?? ""), value: String(e?.value ?? "") }));
+}
+
 function pushRunHistory(node, elapsedStr) {
   if (!node) return;
   const nextEntry = {
@@ -577,7 +584,7 @@ function patchNodeType(nodeType) {
       // Saved workflow sizes are applied later by Comfy/LiteGraph configure path.
       this.properties = this.properties || {};
       this._rf_expanded = !!(this.properties.rf_expanded ?? false);
-      this._rf_run_history = Array.isArray(this.properties.rf_run_history) ? this.properties.rf_run_history.slice(0, 3) : [];
+      this._rf_run_history = plainHistory(this.properties.rf_run_history);
       this._rf_hw_gpu = String(this.properties.rf_hw_gpu || "");
       this._rf_hw_vram = String(this.properties.rf_hw_vram || "");
       setNodeSizeForMode(this);
@@ -618,7 +625,8 @@ function patchNodeType(nodeType) {
     try {
       this.properties = this.properties || {};
       this._rf_expanded = !!(this.properties.rf_expanded ?? this._rf_expanded ?? false);
-      this._rf_run_history = Array.isArray(this.properties.rf_run_history) ? this.properties.rf_run_history.slice(0, 3) : (this._rf_run_history || []);
+      this._rf_run_history = Array.isArray(this.properties.rf_run_history) ? plainHistory(this.properties.rf_run_history) : plainHistory(this._rf_run_history);
+      this.properties.rf_run_history = plainHistory(this._rf_run_history);
       this._rf_hw_gpu = String(this.properties.rf_hw_gpu || this._rf_hw_gpu || "");
       this._rf_hw_vram = String(this.properties.rf_hw_vram || this._rf_hw_vram || "");
       setNodeSizeForMode(this);
@@ -632,7 +640,7 @@ function patchNodeType(nodeType) {
     try {
       o.properties = o.properties || {};
       o.properties.rf_expanded = !!this._rf_expanded;
-      o.properties.rf_run_history = Array.isArray(this._rf_run_history) ? this._rf_run_history.slice(0, 3) : [];
+      o.properties.rf_run_history = plainHistory(this._rf_run_history);
       o.properties.rf_hw_gpu = String(this._rf_hw_gpu || "");
       o.properties.rf_hw_vram = String(this._rf_hw_vram || "");
     } catch (_) {}
