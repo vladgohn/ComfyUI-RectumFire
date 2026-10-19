@@ -8,7 +8,7 @@ import { firetosterShow } from "./fire_toster.js";
 const RF = Object.freeze({
   EXT_NAME: "RectumFireManifest",
   COMMAND_ID: "RectumFire.Manifest",
-  LABEL: "Fire Manifest: list workflow models",
+  LABEL: "🔥Fire Manifest",
   ROUTE: "/rectumfire/manifest",
   MARK: "rf_model_manifest",
   NOTE_TYPE: "MarkdownNote",
