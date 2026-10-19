@@ -6,6 +6,7 @@ from .fire_note        import RectumFireNote
 from .fire_switch      import RectumFireSwitch
 from .fire_banner      import RectumFireBanner
 from .fire_load_image  import RectumFireLoadImage
+from . import fire_manifest  # registers POST /rectumfire/manifest
 
 NODE_CLASS_MAPPINGS = {
     "RectumFireTimer":      RectumFireTimer,
