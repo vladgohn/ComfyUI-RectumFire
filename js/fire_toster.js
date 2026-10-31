@@ -1,28 +1,30 @@
 // fire_toster.js
-// RectumFire DOM tosters (glass) — reusable module.
+// RectumFire DOM tosters — reusable module.
+// Look, motion and placement copy the ComfyUI frontend toast (GlobalToast + PrimeVue Aura dark tokens):
+// content-sized up to 25rem, right edge 0.5rem inside the graph canvas panel, slides up from below,
+// tinted glass (color 500 at 16% alpha) with blur(10px). Placed below the floating action bar.
 // UI only — no engine logic changed.
 
 const TOKENS = Object.freeze({
-  pos: { top: 64, right: 18 },
+  pos: {
+    gap: 8,         // px below the action bar / canvas panel top
+    right: 8,       // px inside the canvas panel's right edge (0.5rem)
+    fallbackTop: 64,
+  },
 
   card: {
-    width: 280,
-    radius: 14,
+    minWidth: 280,  // width follows the content between these two
+    maxWidth: 400,  // 25rem, the core toast width
+    minHeight: 73,
+    radius: 6,
+    blur: 10,
   },
 
-  close: {
-    box: 24,
-    fontSize: 20,
-  },
-
-  type: {
-    family: "Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial",
-  },
-
+  // [500, 700] pairs from the PrimeVue Aura palette, used the way Aura dark toast tokens use them.
   themes: {
-    green:   { bg: "rgba(10,38,22,0.85)", stroke: "#114A29", fg: "#22C55E" },
-    violet:  { bg: "rgba(23,21,36,0.85)", stroke: "#624B89", fg: "#8F60F4" },
-    magenta: { bg: "rgba(45,12,32,0.85)", stroke: "#901F4A", fg: "#DC6C98" },
+    green:   ["#22c55e", "#15803d"],
+    violet:  ["#8b5cf6", "#6d28d9"],
+    magenta: ["#ec4899", "#be185d"],
   },
 });
 
@@ -34,7 +36,9 @@ const FireDomtoster = (() => {
     card: "rfFire__card",
     show: "rfFire__show",
     hide: "rfFire__hide",
-    titleRow: "rfFire__titleRow",
+    content: "rfFire__content",
+    icon: "rfFire__icon",
+    text: "rfFire__text",
     title: "rfFire__title",
     body: "rfFire__body",
     close: "rfFire__close",
@@ -48,105 +52,152 @@ const FireDomtoster = (() => {
     s.textContent = `
 #${ROOT_ID}{
   position: fixed;
-  top: ${TOKENS.pos.top}px;
+  top: ${TOKENS.pos.fallbackTop}px;
   right: ${TOKENS.pos.right}px;
-  z-index: 999999;
+  z-index: 10000;
 
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 12px !important;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
 
-  pointer-events: none !important;
+  pointer-events: none;
 }
 
 .${CLS.card}{
-  width: ${TOKENS.card.width}px;
-  min-height: 64px;
-  height: auto;
+  --rf-c: ${TOKENS.themes.green[0]};
+  --rf-s: ${TOKENS.themes.green[1]};
 
-  border-radius: ${TOKENS.card.radius}px;
+  width: fit-content;
+  min-width: ${TOKENS.card.minWidth}px;
+  max-width: min(${TOKENS.card.maxWidth}px, calc(100vw - 16px));
+  min-height: ${TOKENS.card.minHeight}px;
+  max-height: 1000px;
+  margin-bottom: 16px;
   box-sizing: border-box;
 
-  padding: 14px 16px;
+  border-radius: ${TOKENS.card.radius}px;
+  border: 1px solid color-mix(in srgb, var(--rf-s), transparent 64%);
+  background: color-mix(in srgb, var(--rf-c), transparent 84%);
+  box-shadow: 0px 4px 8px 0px color-mix(in srgb, var(--rf-c), transparent 96%);
+  backdrop-filter: blur(${TOKENS.card.blur}px);
+  -webkit-backdrop-filter: blur(${TOKENS.card.blur}px);
 
-  transform: translateY(10px);
+  font-family: inherit;
+  pointer-events: auto;
+
   opacity: 0;
-  transition: opacity 0.3s ease, transform 0.3s ease;
-
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
-
-  font-family: ${TOKENS.type.family};
-
-  pointer-events: none !important;
-  position: relative;
-
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  transform: translateY(50%);
+  transition: transform 0.3s, opacity 0.3s;
 }
 
 .${CLS.card}.${CLS.show}{
-  transform: translateY(0px);
   opacity: 1;
+  transform: translateY(0);
 }
 
 .${CLS.card}.${CLS.hide}{
-  transform: translateY(-10px);
+  max-height: 0;
+  min-height: 0;
   opacity: 0;
+  margin-bottom: 0;
+  overflow: hidden;
+  transform: translateY(0);
+  transition: max-height 0.45s cubic-bezier(0, 1, 0, 1), opacity 0.3s, margin-bottom 0.3s;
 }
 
-.${CLS.titleRow}{
-  position: relative;
+.${CLS.content}{
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 8px;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px;
+}
+
+.${CLS.icon}{
+  flex-shrink: 0;
+  font-size: 18px;
+  line-height: 24px;
+}
+
+.${CLS.text}{
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
 }
 
 .${CLS.title}{
-  font-size: 15px;
+  color: var(--rf-c);
+  font-size: 16px;
   font-weight: 500;
-  line-height: 1.2;
+  line-height: 24px;
 }
 
 .${CLS.body}{
-  font-size: 12px;
-  font-weight: 400;
   color: #ffffff;
-  line-height: 1.35;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
 
 .${CLS.close}{
-  width: ${TOKENS.close.box}px;
-  height: ${TOKENS.close.box}px;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
   display: grid;
   place-items: center;
+  border-radius: 50%;
 
-  font-size: ${TOKENS.close.fontSize}px;
+  color: var(--rf-c);
+  font-size: 20px;
   line-height: 1;
   user-select: none;
   cursor: pointer;
-
-  opacity: .85;
-  pointer-events: auto !important;
+  transition: background 0.2s;
 }
-.${CLS.close}:hover{ opacity: 1; }
+.${CLS.close}:hover{ background: rgba(255, 255, 255, 0.05); }
 `;
     document.head.appendChild(s);
   }
 
+  function rectOf(selector) {
+    try {
+      const el = document.querySelector(selector);
+      const r = el?.getBoundingClientRect();
+      return r && r.width > 0 && r.height > 0 ? r : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Same anchor as the core toast (right edge of the graph canvas panel),
+  // but the top goes below the floating action bar instead of over it.
+  function place(root) {
+    const panel = rectOf('[class*="anchor-name:--graph-canvas-panel"]');
+    const bar = document.querySelector(".actionbar-container")?.parentElement?.getBoundingClientRect();
+
+    let top = panel ? panel.top + TOKENS.pos.gap : TOKENS.pos.fallbackTop;
+    if (bar && bar.height > 0 && bar.bottom > top - TOKENS.pos.gap && bar.top < innerHeight / 2) {
+      top = Math.max(top, bar.bottom + TOKENS.pos.gap);
+    }
+    const right = panel ? Math.max(0, innerWidth - panel.right) + TOKENS.pos.right : TOKENS.pos.right;
+
+    root.style.top = `${Math.round(top)}px`;
+    root.style.right = `${Math.round(right)}px`;
+  }
+
   function ensureRoot() {
     let root = document.getElementById(ROOT_ID);
-    if (root) return root;
-
-    ensureStyle();
-    root = document.createElement("div");
-    root.id = ROOT_ID;
-    root.style.pointerEvents = "none";
-    document.body.appendChild(root);
+    if (!root) {
+      ensureStyle();
+      root = document.createElement("div");
+      root.id = ROOT_ID;
+      document.body.appendChild(root);
+    }
+    place(root);
     return root;
   }
 
@@ -170,27 +221,25 @@ const FireDomtoster = (() => {
 
   function makeCard({ theme, title, sub, lifeMs }) {
     const root = ensureRoot();
-    const pal = TOKENS.themes[theme] || TOKENS.themes.green;
+    const [c500, c700] = TOKENS.themes[theme] || TOKENS.themes.green;
 
     const el = document.createElement("div");
     el.className = CLS.card;
-    el.style.background = pal.bg;
-    el.style.border = `1px solid ${pal.stroke}`;
-    el.style.pointerEvents = "none";
+    el.style.setProperty("--rf-c", c500);
+    el.style.setProperty("--rf-s", c700);
 
     const safeSub = escapeHtml(sub);
-
     const safeTitle = escapeHtml(title || "Fire Resolve");
 
     el.innerHTML = `
-      <div class="${CLS.titleRow}">
-        <div style="display:flex; align-items:center; gap:8px;">
-          <div style="font-size:16px;">🔥</div>
-          <div class="${CLS.title}" style="color:${pal.fg}">${safeTitle}</div>
+      <div class="${CLS.content}">
+        <div class="${CLS.icon}">🔥</div>
+        <div class="${CLS.text}">
+          <div class="${CLS.title}">${safeTitle}</div>
+          ${safeSub ? `<div class="${CLS.body}">${safeSub}</div>` : ``}
         </div>
-        <div class="${CLS.close}" aria-label="close" style="color:${pal.fg}">×</div>
+        <div class="${CLS.close}" aria-label="close">×</div>
       </div>
-      ${safeSub ? `<div class="${CLS.body}">${safeSub}</div>` : ``}
     `;
 
     root.appendChild(el);
@@ -204,10 +253,8 @@ const FireDomtoster = (() => {
       kill();
     });
 
-    requestAnimationFrame(() => {
-      el.classList.remove(CLS.hide);
-      el.classList.add(CLS.show);
-    });
+    // Two frames so the start state (translateY(50%), opacity 0) is painted before the transition.
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add(CLS.show)));
 
     const ms = typeof lifeMs === "number" ? lifeMs : 2000;
     el.__rf_timer = window.setTimeout(kill, ms);
@@ -216,7 +263,8 @@ const FireDomtoster = (() => {
   }
 
   function destroyCard(el) {
-    if (!el) return;
+    if (!el || el.__rf_dying) return;
+    el.__rf_dying = true;
 
     try {
       if (el.__rf_timer) {
@@ -225,13 +273,15 @@ const FireDomtoster = (() => {
       }
     } catch (_) {}
 
-    el.classList.remove(CLS.show);
+    el.style.maxHeight = `${el.offsetHeight}px`;
+    void el.offsetHeight;
+    el.style.maxHeight = "";
     el.classList.add(CLS.hide);
 
     window.setTimeout(() => {
       try { el.remove(); } catch (_) {}
       cleanupIfEmpty();
-    }, 320);
+    }, 460);
   }
 
   return { show: makeCard };
