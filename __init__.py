@@ -6,6 +6,7 @@ from .fire_note        import RectumFireNote
 from .fire_switch      import RectumFireSwitch
 from .fire_banner      import RectumFireBanner
 from .fire_load_image  import RectumFireLoadImage
+from .fire_model_card  import RectumFireModelCard
 from . import fire_manifest  # registers POST /rectumfire/manifest
 
 NODE_CLASS_MAPPINGS = {
@@ -15,6 +16,7 @@ NODE_CLASS_MAPPINGS = {
     "RectumFireSwitch":     RectumFireSwitch,
     "RectumFireBanner":     RectumFireBanner,
     "RectumFireLoadImage":  RectumFireLoadImage,
+    "RectumFireModelCard":  RectumFireModelCard,
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
@@ -24,6 +26,7 @@ NODE_DISPLAY_NAME_MAPPINGS = {
     "RectumFireSwitch":     "🔥Fire Switch",
     "RectumFireBanner":     "🔥Fire Banner",
     "RectumFireLoadImage":  "🔥Fire Load Image",
+    "RectumFireModelCard":  "🔥Fire Model Card",
 }
 
 __all__ = [
